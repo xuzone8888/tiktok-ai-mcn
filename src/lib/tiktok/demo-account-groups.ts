@@ -18,6 +18,10 @@ type DemoAccount = {
   updated_at: string;
   group_id: string | null;
   group_name: string | null;
+  comment_authorization_status: "active" | "not_connected";
+  comment_scopes: string[];
+  comment_access_token_expires_at: string | null;
+  comment_refresh_token_expires_at: string | null;
 };
 
 type DemoGroup = {
@@ -83,6 +87,12 @@ function buildAccount(index: number, groupId: string | null): DemoAccount {
     updated_at: DEMO_STARTED_AT,
     group_id: groupId,
     group_name: null,
+    comment_authorization_status: index % 3 === 0 ? "active" : "not_connected",
+    comment_scopes: index % 3 === 0 ? ["comment.list", "comment.list.manage"] : [],
+    comment_access_token_expires_at: index % 3 === 0 ? expiresAt : null,
+    comment_refresh_token_expires_at: index % 3 === 0
+      ? new Date(Date.UTC(2027, 0, 1)).toISOString()
+      : null,
   };
 }
 

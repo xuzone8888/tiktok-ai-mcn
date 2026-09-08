@@ -14,6 +14,8 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
+    "check:tiktok-production": "node scripts/tiktok-production-readiness.cjs --role=app --env=.env.local",
+    "check:tiktok-broker": "node scripts/tiktok-production-readiness.cjs --role=broker --env=broker.env",
     "analyze": "ANALYZE=true next build",
     "clean": "rm -rf .next node_modules/.cache",
     "canvas:additive-operation": "node scripts/canvas-additive-production-operation.mjs",

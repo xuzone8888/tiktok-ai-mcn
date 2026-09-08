@@ -55,11 +55,15 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
     review: { label: '需确认', className: 'text-orange-300 border-orange-400/30 bg-orange-400/10', icon: AlertTriangle },
     cancelled: { label: '已取消', className: 'text-zinc-500 border-zinc-500/30 bg-zinc-500/10', icon: XCircle },
 }
-const REVIEW_ERROR_CODE = 'WORKER_INTERRUPTED_NEEDS_REVIEW'
+const REVIEW_ERROR_CODES = new Set([
+    'WORKER_INTERRUPTED_NEEDS_REVIEW',
+    'TIKTOK_INIT_OUTCOME_UNKNOWN',
+])
 
 export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps) {
     const [deleting, setDeleting] = useState(false)
-    const isReview = item.status === 'failed' && item.error_code === REVIEW_ERROR_CODE
+    const isReview = item.status === 'failed'
+        && Boolean(item.error_code && REVIEW_ERROR_CODES.has(item.error_code))
     const config = isReview ? statusConfig.review : (statusConfig[item.status] || statusConfig.pending)
     const StatusIcon = config.icon
     const isProcessing = ['processing', 'uploading'].includes(item.status)

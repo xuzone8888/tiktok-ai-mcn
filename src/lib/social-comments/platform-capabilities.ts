@@ -37,10 +37,10 @@ export const SOCIAL_COMMENT_PLATFORM_CAPABILITIES: Record<SocialPlatform, Social
     auto_sync: false,
   },
   tiktok: {
-    read: 'unsupported',
-    sync: 'unsupported',
-    reply: 'unsupported',
-    requires_explicit_content: false,
+    read: 'supported',
+    sync: 'supported',
+    reply: 'feature_flag',
+    requires_explicit_content: true,
     recent_sync: false,
     auto_sync: false,
   },
@@ -53,9 +53,15 @@ export function getSocialCommentPlatformCapabilities(platform: SocialPlatform) {
 export function isSocialCommentOperationSupported(
   platform: SocialPlatform,
   operation: 'read' | 'sync' | 'reply',
-  options: { instagramReplyEnabled?: boolean } = {}
+  options: {
+    instagramReplyEnabled?: boolean
+    tiktokReplyEnabled?: boolean
+  } = {}
 ) {
   const state = SOCIAL_COMMENT_PLATFORM_CAPABILITIES[platform][operation]
   if (state === 'supported') return true
-  return state === 'feature_flag' && platform === 'instagram' && options.instagramReplyEnabled === true
+  if (state !== 'feature_flag') return false
+  if (platform === 'instagram') return options.instagramReplyEnabled === true
+  if (platform === 'tiktok') return options.tiktokReplyEnabled === true
+  return false
 }

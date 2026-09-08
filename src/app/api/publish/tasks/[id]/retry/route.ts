@@ -25,7 +25,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         items:publish_task_items(
           id,
           status,
-          account_id
+          account_id,
+          error_code,
+          tiktok_transfer_method
         )
       `)
             .eq('id', id)
@@ -45,6 +47,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             }, { status: 400 })
         }
 
+        const ambiguousItems = failedItems.filter((item: { error_code?: string | null }) => (
+            item.error_code === 'TIKTOK_INIT_OUTCOME_UNKNOWN'
+            || item.error_code === 'WORKER_INTERRUPTED_NEEDS_REVIEW'
+        ))
+        if (ambiguousItems.length > 0) {
+            return NextResponse.json({
+                error: '部分发布结果无法确认，请先在 TikTok 账号中人工核对，暂不可重试',
+                requires_manual_review: true,
+            }, { status: 409 })
+        }
+
+
+        const localFileItems = failedItems.filter((item: { tiktok_transfer_method?: string }) => (
+            item.tiktok_transfer_method === 'FILE_UPLOAD'
+        ))
+        if (localFileItems.length > 0) {
+            return NextResponse.json({
+                error: '本地文件直传任务不能后台重试，请重新选择原文件创建新任务',
+                requires_file_reselection: true,
+            }, { status: 409 })
+        }
+
         // Check if related accounts are still authorized
         const accountIds = Array.from(new Set(failedItems.map((i: { account_id: string }) => i.account_id)))
 
@@ -52,10 +76,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .from('tiktok_accounts')
             .select('id, token_expires_at')
             .eq('user_id', user.id)
+            .eq('account_type', 'normal')
             .in('id', accountIds)
 
         if (accountsError) {
             return NextResponse.json({ error: '获取账号信息失败' }, { status: 500 })
+        }
+
+        if (!accounts || accounts.length !== accountIds.length) {
+            return NextResponse.json({ error: '部分账号不存在或无权访问' }, { status: 400 })
         }
 
         const now = new Date()
@@ -75,6 +104,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .from('publish_task_items')
             .update({
                 status: 'pending',
+                error_code: null,
                 error_message: null,
             })
             .in('id', failedItemIds)

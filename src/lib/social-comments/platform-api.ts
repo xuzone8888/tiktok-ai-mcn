@@ -25,6 +25,22 @@ const INSTAGRAM_NATIVE_COMMENT_FIELDS = 'from,text'
 const INSTAGRAM_NATIVE_REPLY_FIELDS = 'from,text'
 const INSTAGRAM_FACEBOOK_COMMENT_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden,replies{id,text,from{id,username},timestamp,like_count,hidden}'
 const INSTAGRAM_FACEBOOK_REPLY_FIELDS = 'id,text,from{id,username},timestamp,like_count,hidden'
+const TIKTOK_BUSINESS_API_URL = 'https://business-api.tiktok.com/open_api/v1.3'
+const TIKTOK_COMMENT_PAGE_SIZE = 20
+const TIKTOK_MAX_TOP_LEVEL_COMMENTS = 500
+const TIKTOK_MAX_REPLIES_PER_COMMENT = 500
+const TIKTOK_COMMENT_TIMEOUT_MS = 20_000
+const TIKTOK_REPLY_BROKER_TIMEOUT_MS = 25_000
+export interface TikTokCommentReadBudget {
+  topLevelRequests: number
+  replyRequests: number
+  resumeCursor?: number | null
+  replyResume?: {
+    parent_ids: string[]
+    observed_parent_ids: string[]
+    cursor: number | null
+  } | null
+}
 export const INSTAGRAM_COMMENT_SYNC_LIMITS = {
   topLevel: 500,
   repliesPerComment: 500,
@@ -36,8 +52,17 @@ export class SocialCommentApiError extends Error {
   httpStatus: number
   retryable: boolean
   retryAfter: string | null
+  providerWriteOutcome: 'rejected' | 'unknown' | null
 
-  constructor(platform: SocialPlatform, code: string, message: string, httpStatus = 500, retryable = false, retryAfter: string | null = null) {
+  constructor(
+    platform: SocialPlatform,
+    code: string,
+    message: string,
+    httpStatus = 500,
+    retryable = false,
+    retryAfter: string | null = null,
+    providerWriteOutcome: 'rejected' | 'unknown' | null = null,
+  ) {
     super(message)
     this.name = 'SocialCommentApiError'
     this.platform = platform
@@ -45,6 +70,7 @@ export class SocialCommentApiError extends Error {
     this.httpStatus = httpStatus
     this.retryable = retryable
     this.retryAfter = retryAfter
+    this.providerWriteOutcome = providerWriteOutcome
   }
 }
 
@@ -58,12 +84,13 @@ export class SocialCommentUnsupportedError extends SocialCommentApiError {
 const COMMENT_BROKER_TIMEOUT_MS = 60_000
 
 async function callCommentBroker<T>(
-  platform: Exclude<SocialPlatform, 'tiktok'>,
+  platform: SocialPlatform,
   op: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  timeoutMs = COMMENT_BROKER_TIMEOUT_MS,
 ): Promise<T> {
   try {
-    return await callBroker<T>(platform, op, args, { timeoutMs: COMMENT_BROKER_TIMEOUT_MS })
+    return await callBroker<T>(platform, op, args, { timeoutMs })
   } catch (error) {
     if (error instanceof BrokerTransportError) {
       throw new SocialCommentApiError(
@@ -71,7 +98,9 @@ async function callCommentBroker<T>(
         'provider_unreachable',
         `${platform} comment service is temporarily unreachable through the overseas gateway.`,
         503,
-        true
+        true,
+        null,
+        op === 'replyToTikTokComment' ? 'unknown' : null,
       )
     }
 
@@ -81,6 +110,7 @@ async function callCommentBroker<T>(
           httpStatus?: unknown
           retryable?: unknown
           retryAfter?: unknown
+          providerWriteOutcome?: unknown
         }
       : null
     const httpStatus = typeof brokerError?.httpStatus === 'number' ? brokerError.httpStatus : 500
@@ -90,7 +120,10 @@ async function callCommentBroker<T>(
       error instanceof Error ? error.message : `${platform} comment request failed.`,
       httpStatus,
       brokerError?.retryable === true,
-      typeof brokerError?.retryAfter === 'string' ? brokerError.retryAfter : null
+      typeof brokerError?.retryAfter === 'string' ? brokerError.retryAfter : null,
+      brokerError?.providerWriteOutcome === 'rejected' || brokerError?.providerWriteOutcome === 'unknown'
+        ? brokerError.providerWriteOutcome
+        : null,
     )
   }
 }
@@ -204,6 +237,10 @@ function isRetryableStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status >= 500
 }
 
+function isDefiniteWriteRejectionStatus(status: number) {
+  return [400, 401, 403, 404, 405, 409, 410, 413, 415, 422].includes(status)
+}
+
 async function readJson(response: Response): Promise<any> {
   return response.json().catch(() => null)
 }
@@ -256,6 +293,29 @@ function numberValue(value: unknown): number {
 
 function textValue(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function safeNonNegativeInteger(value: unknown): number {
+  const number = Number(value)
+  return Number.isSafeInteger(number) && number >= 0 ? number : 0
+}
+
+function parseTikTokCursor(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : null
+  }
+  if (typeof value !== 'string' || !/^(0|[1-9]\d*)$/.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+function tikTokDateTime(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+  const timestamp = Date.parse(
+    /(?:Z|[+-]\d{2}:\d{2})$/.test(normalized) ? normalized : `${normalized}Z`,
+  )
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null
 }
 
 function readMetaAfterCursor(value: any): string | null {
@@ -1002,9 +1062,513 @@ export async function replyToFacebookComment(
   }
 }
 
-export async function replyToTikTokComment(): Promise<ExternalSocialComment> {
-  throw new SocialCommentUnsupportedError(
+interface TikTokBusinessCommentTokenContext extends CommentTokenContext {
+  accountExternalId: string
+}
+
+interface TikTokBusinessCommentListPage {
+  comments: any[]
+  cursor: number | null
+  hasMore: boolean
+}
+
+interface TikTokRequestBudget {
+  remaining: number
+}
+
+function tikTokReadRetryDelayMs(retryAfter: string | null, attempt: number): number {
+  let providerDelay = 0
+  if (retryAfter && /^\d+$/.test(retryAfter.trim())) {
+    providerDelay = Number(retryAfter.trim()) * 1000
+  } else if (retryAfter) {
+    const timestamp = Date.parse(retryAfter)
+    if (Number.isFinite(timestamp)) providerDelay = Math.max(0, timestamp - Date.now())
+  }
+  const exponential = 250 * 2 ** attempt
+  const jitter = Math.floor(Math.random() * 251)
+  return Math.min(2000, Math.max(providerDelay, exponential) + jitter)
+}
+
+async function waitForTikTokReadRetry(delayMs: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, delayMs))
+}
+
+function mapTikTokBusinessComment(
+  value: any,
+  externalContentId: string,
+  accountExternalId: string,
+  fallbackParentId: string | null,
+): ExternalSocialComment | null {
+  const commentId = textValue(value?.comment_id).trim()
+  const message = textValue(value?.text)
+  if (!commentId || !message.trim()) return null
+
+  const parentId = textValue(value?.parent_comment_id).trim() || fallbackParentId
+  const isFromAccount = value?.owner === true
+    || (textValue(value?.user_id).trim() !== ''
+      && textValue(value?.user_id).trim() === accountExternalId)
+
+  return {
+    external_comment_id: commentId,
+    external_content_id: externalContentId,
+    parent_external_comment_id: parentId,
+    thread_external_id: parentId || commentId,
+    author_id: textValue(value?.user_id).trim() || null,
+    author_name: textValue(value?.display_name).trim()
+      || textValue(value?.username).trim()
+      || textValue(value?.unique_identifier).trim()
+      || null,
+    author_avatar_url: textValue(value?.profile_image).trim() || null,
+    message,
+    like_count: safeNonNegativeInteger(value?.likes),
+    reply_count: safeNonNegativeInteger(value?.replies),
+    can_reply: !isFromAccount,
+    is_from_account: isFromAccount,
+    permalink: null,
+    remote_created_at: tikTokDateTime(value?.create_time),
+    metadata: {
+      provider: 'tiktok_business',
+      visibility: textValue(value?.status).trim() || null,
+      liked: value?.liked === true,
+      pinned: value?.pinned === true,
+    },
+  }
+}
+
+async function fetchTikTokBusinessCommentPage(
+  token: TikTokBusinessCommentTokenContext,
+  endpoint: '/business/comment/list/' | '/business/comment/reply/list/',
+  externalContentId: string,
+  parentExternalCommentId: string | null,
+  cursor: number,
+  requestBudget: TikTokRequestBudget,
+): Promise<TikTokBusinessCommentListPage> {
+  const params = new URLSearchParams({
+    business_id: token.accountExternalId,
+    video_id: externalContentId,
+    status: 'ALL',
+    cursor: String(cursor),
+    max_count: String(TIKTOK_COMMENT_PAGE_SIZE),
+  })
+  if (parentExternalCommentId) {
+    params.set('comment_id', parentExternalCommentId)
+  }
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (requestBudget.remaining <= 0) {
+      throw new SocialCommentApiError(
+        'tiktok',
+        'comment_read_budget_exhausted',
+        'TikTok comment synchronization reached its provider call budget.',
+        429,
+        true,
+        '60',
+      )
+    }
+    requestBudget.remaining -= 1
+
+    let response: Response
+    try {
+      response = await fetch(`${TIKTOK_BUSINESS_API_URL}${endpoint}?${params.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Access-Token': token.accessToken,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(TIKTOK_COMMENT_TIMEOUT_MS),
+      })
+    } catch {
+      if (attempt < 2 && requestBudget.remaining > 0) {
+        await waitForTikTokReadRetry(tikTokReadRetryDelayMs(null, attempt))
+        continue
+      }
+      throw new SocialCommentApiError(
+        'tiktok',
+        'provider_unreachable',
+        'TikTok Business comment service is temporarily unreachable.',
+        503,
+        true,
+      )
+    }
+
+    const payload = await readJson(response)
+    if (
+      !response.ok
+      || payload?.code !== 0
+      || !payload?.data
+      || typeof payload.data !== 'object'
+      || Array.isArray(payload.data)
+    ) {
+      const code = payload?.code === undefined ? String(response.status) : String(payload.code)
+      const retryable = isRetryableStatus(response.status)
+        || response.ok && Number(payload?.code) >= 50000
+      const retryAfter = readRetryAfter(response)
+      if (retryable && attempt < 2 && requestBudget.remaining > 0) {
+        await waitForTikTokReadRetry(tikTokReadRetryDelayMs(retryAfter, attempt))
+        continue
+      }
+      throw new SocialCommentApiError(
+        'tiktok',
+        code,
+        'TikTok Business comment request failed.',
+        response.ok ? 502 : response.status,
+        retryable,
+        retryAfter,
+      )
+    }
+
+    const rawItems = parentExternalCommentId
+      ? payload.data.reply_list || payload.data.comments
+      : payload.data.comments || payload.data.comment_list
+    if (!Array.isArray(rawItems) || typeof payload.data.has_more !== 'boolean') {
+      throw new SocialCommentApiError(
+        'tiktok',
+        'invalid_response',
+        'TikTok Business returned an invalid comment list response.',
+        502,
+      )
+    }
+    const nextCursor = parseTikTokCursor(payload.data.cursor)
+    if (payload.data.has_more === true && nextCursor === null) {
+      throw new SocialCommentApiError(
+        'tiktok',
+        'invalid_response',
+        'TikTok Business returned an invalid comment pagination cursor.',
+        502,
+      )
+    }
+    return {
+      comments: rawItems,
+      cursor: nextCursor,
+      hasMore: payload.data.has_more,
+    }
+  }
+
+  throw new SocialCommentApiError(
     'tiktok',
-    'TikTok does not provide a public creator comment reply endpoint for Login Kit or Content Posting API accounts.'
+    'provider_unreachable',
+    'TikTok Business comment service is temporarily unreachable.',
+    503,
+    true,
   )
+}
+
+async function listTikTokBusinessCommentPages(
+  token: TikTokBusinessCommentTokenContext,
+  externalContentId: string,
+  parentExternalCommentId: string | null,
+  limit: number,
+  requestBudget: TikTokRequestBudget,
+  initialCursor = 0,
+): Promise<{ comments: ExternalSocialComment[]; truncated: boolean; resumeCursor: number | null }> {
+  const comments: ExternalSocialComment[] = []
+  const seenCommentIds = new Set<string>()
+  const seenCursors = new Set<number>()
+  let cursor = initialCursor
+  let resumeCursor: number | null = null
+  let truncated = false
+  let pageCount = 0
+  const maxPages = Math.ceil(limit / TIKTOK_COMMENT_PAGE_SIZE)
+  let paginationComplete = false
+
+  while (comments.length < limit && pageCount < maxPages) {
+    if (requestBudget.remaining <= 0) {
+      truncated = true
+      resumeCursor = cursor
+      break
+    }
+    if (seenCursors.has(cursor)) {
+      truncated = true
+      break
+    }
+    seenCursors.add(cursor)
+    pageCount += 1
+
+    const page = await fetchTikTokBusinessCommentPage(
+      token,
+      parentExternalCommentId
+        ? '/business/comment/reply/list/'
+        : '/business/comment/list/',
+      externalContentId,
+      parentExternalCommentId,
+      cursor,
+      requestBudget,
+    )
+    for (const rawComment of page.comments) {
+      const mapped = mapTikTokBusinessComment(
+        rawComment,
+        externalContentId,
+        token.accountExternalId,
+        parentExternalCommentId,
+      )
+      if (!mapped || seenCommentIds.has(mapped.external_comment_id)) continue
+      seenCommentIds.add(mapped.external_comment_id)
+      comments.push(mapped)
+      if (comments.length >= limit) break
+    }
+
+    if (!page.hasMore) {
+      paginationComplete = true
+      break
+    }
+    if (page.cursor === null || page.cursor === cursor) {
+      truncated = true
+      break
+    }
+    cursor = page.cursor
+    if (comments.length >= limit) {
+      truncated = true
+      resumeCursor = cursor
+    }
+  }
+
+  if (pageCount >= maxPages && !paginationComplete) {
+    truncated = true
+    resumeCursor = cursor
+  }
+
+  return { comments, truncated, resumeCursor }
+}
+
+export async function listTikTokComments(
+  token: TikTokBusinessCommentTokenContext,
+  externalContentId: string,
+  budget: TikTokCommentReadBudget = { topLevelRequests: 5, replyRequests: 15 },
+): Promise<SocialCommentListResult> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<SocialCommentListResult>('tiktok', 'listTikTokComments', {
+      token,
+      externalContentId,
+      budget,
+    })
+  }
+
+  const topLevelBudget = { remaining: Math.max(0, Math.trunc(budget.topLevelRequests)) }
+  const resumeCursor = Number.isSafeInteger(budget.resumeCursor) && Number(budget.resumeCursor) > 0
+    ? Number(budget.resumeCursor)
+    : null
+  // Always read the newest page first. When a prior run paused deeper
+  // pagination, spend the remaining shared budget resuming that backlog so
+  // newly-arrived comments are not hidden until the backlog is exhausted.
+  const newest = await listTikTokBusinessCommentPages(
+    token,
+    externalContentId,
+    null,
+    resumeCursor === null ? TIKTOK_MAX_TOP_LEVEL_COMMENTS : TIKTOK_COMMENT_PAGE_SIZE,
+    topLevelBudget,
+  )
+  const backlog = resumeCursor !== null && topLevelBudget.remaining > 0
+    ? await listTikTokBusinessCommentPages(
+      token,
+      externalContentId,
+      null,
+      Math.max(1, TIKTOK_MAX_TOP_LEVEL_COMMENTS - newest.comments.length),
+      topLevelBudget,
+      resumeCursor,
+    )
+    : null
+  const topLevelComments = [...newest.comments]
+  const comments = [...topLevelComments]
+  const seenTopLevelIds = new Set(comments.map((comment) => comment.external_comment_id))
+  for (const comment of backlog?.comments || []) {
+    if (seenTopLevelIds.has(comment.external_comment_id)) continue
+    seenTopLevelIds.add(comment.external_comment_id)
+    topLevelComments.push(comment)
+    comments.push(comment)
+  }
+  let truncated = newest.truncated || backlog?.truncated === true
+  const replyBudget = { remaining: Math.max(0, Math.trunc(budget.replyRequests)) }
+
+  const priorReplyParents = Array.isArray(budget.replyResume?.parent_ids)
+    ? budget.replyResume.parent_ids.filter((value) => typeof value === 'string' && value.length > 0)
+    : []
+  const currentReplyParents = topLevelComments
+    .filter((comment) => comment.reply_count > 0)
+    .map((comment) => comment.external_comment_id)
+  const priorObservedParents = Array.isArray(budget.replyResume?.observed_parent_ids)
+    ? budget.replyResume.observed_parent_ids.filter(
+      (value) => typeof value === 'string' && value.length > 0,
+    )
+    : priorReplyParents
+  const priorObservedSet = new Set(priorObservedParents)
+  const freshReplyParents = currentReplyParents.filter((parentId) => !priorObservedSet.has(parentId))
+  // Finish the persisted queue first, then process only parents first observed
+  // in this sync. The observed snapshot prevents restarting a completed prefix
+  // while ensuring newly-arrived parents are queued before reporting complete.
+  const replyParentIds = Array.from(new Set(
+    priorReplyParents.length > 0
+      ? [...priorReplyParents, ...freshReplyParents]
+      : currentReplyParents,
+  )).slice(0, TIKTOK_MAX_TOP_LEVEL_COMMENTS)
+  const observedReplyParentIds = Array.from(new Set([
+    ...priorObservedParents,
+    ...currentReplyParents,
+  ])).slice(0, TIKTOK_MAX_TOP_LEVEL_COMMENTS)
+  let replyResume: SocialCommentListResult['provider_reply_resume'] = null
+
+  for (let index = 0; index < replyParentIds.length; index += 1) {
+    const parentId = replyParentIds[index]
+    if (replyBudget.remaining <= 0) {
+      truncated = true
+      replyResume = {
+        parent_ids: replyParentIds.slice(index),
+        observed_parent_ids: observedReplyParentIds,
+        cursor: null,
+      }
+      break
+    }
+    const initialReplyCursor = index === 0
+      && priorReplyParents[0] === parentId
+      && Number.isSafeInteger(budget.replyResume?.cursor)
+      && Number(budget.replyResume?.cursor) >= 0
+      ? Number(budget.replyResume?.cursor)
+      : 0
+    const replies = await listTikTokBusinessCommentPages(
+      token,
+      externalContentId,
+      parentId,
+      TIKTOK_MAX_REPLIES_PER_COMMENT,
+      replyBudget,
+      initialReplyCursor,
+    )
+    comments.push(...replies.comments)
+    truncated = truncated || replies.truncated
+    if (replies.resumeCursor !== null) {
+      replyResume = {
+        parent_ids: replyParentIds.slice(index),
+        observed_parent_ids: observedReplyParentIds,
+        cursor: replies.resumeCursor,
+      }
+      break
+    }
+  }
+
+  if (truncated) {
+    for (const comment of comments) {
+      comment.metadata = { ...(comment.metadata || {}), truncated: true }
+    }
+  }
+
+  return {
+    comments,
+    replies_fetched: replyResume === null,
+    truncated,
+    thread_completeness: truncated ? 'truncated' : 'complete',
+    provider_resume_cursor: backlog
+      ? backlog.resumeCursor
+      : resumeCursor !== null
+      ? resumeCursor
+      : newest.resumeCursor,
+    provider_reply_resume: replyResume,
+  }
+}
+
+export async function replyToTikTokComment(
+  token: TikTokBusinessCommentTokenContext,
+  parentExternalCommentId: string,
+  externalContentId: string,
+  message: string,
+): Promise<ExternalSocialComment> {
+  if (isBrokerEnabled()) {
+    return callCommentBroker<ExternalSocialComment>('tiktok', 'replyToTikTokComment', {
+      token,
+      parentExternalCommentId,
+      externalContentId,
+      message,
+    }, TIKTOK_REPLY_BROKER_TIMEOUT_MS)
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${TIKTOK_BUSINESS_API_URL}/business/comment/reply/create/`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Access-Token': token.accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        business_id: token.accountExternalId,
+        video_id: externalContentId,
+        comment_id: parentExternalCommentId,
+        text: message,
+      }),
+      signal: AbortSignal.timeout(TIKTOK_COMMENT_TIMEOUT_MS),
+    })
+  } catch {
+    throw new SocialCommentApiError(
+      'tiktok',
+      'provider_unreachable',
+      'TikTok Business comment service is temporarily unreachable.',
+      503,
+      true,
+      null,
+      'unknown',
+    )
+  }
+
+  const payload = await readJson(response)
+  if (
+    !response.ok
+    || payload?.code !== 0
+    || !payload?.data
+    || typeof payload.data !== 'object'
+    || Array.isArray(payload.data)
+  ) {
+    const code = payload?.code === undefined ? String(response.status) : String(payload.code)
+    const providerWriteOutcome: 'rejected' | 'unknown' = !response.ok
+      ? isDefiniteWriteRejectionStatus(response.status)
+        ? 'rejected'
+        : 'unknown'
+      : payload?.code !== undefined && payload.code !== 0
+        ? 'rejected'
+        : 'unknown'
+    throw new SocialCommentApiError(
+      'tiktok',
+      code,
+      'TikTok Business comment request failed.',
+      response.ok ? 502 : response.status,
+      isRetryableStatus(response.status),
+      readRetryAfter(response),
+      providerWriteOutcome,
+    )
+  }
+
+  const rawComment = payload.data.comment
+    && typeof payload.data.comment === 'object'
+    && !Array.isArray(payload.data.comment)
+    ? payload.data.comment
+    : payload.data
+  const mapped = mapTikTokBusinessComment(
+    {
+      ...rawComment,
+      text: textValue(rawComment?.text).trim() ? rawComment.text : message,
+    },
+    externalContentId,
+    token.accountExternalId,
+    parentExternalCommentId,
+  )
+  if (!mapped) {
+    throw new SocialCommentApiError(
+      'tiktok',
+      'invalid_response',
+      'TikTok Business returned an invalid comment reply response.',
+      502,
+      false,
+      null,
+      'unknown',
+    )
+  }
+
+  return {
+    ...mapped,
+    parent_external_comment_id: parentExternalCommentId,
+    thread_external_id: parentExternalCommentId,
+    author_id: mapped.author_id || token.accountExternalId,
+    author_name: mapped.author_name || token.accountName,
+    message: mapped.message || message,
+    can_reply: false,
+    is_from_account: true,
+  }
 }

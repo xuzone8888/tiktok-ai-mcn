@@ -35,6 +35,7 @@ import {
     Hash,
     Zap,
     MessageSquare,
+    MessageCircle,
     Repeat2,
     Scissors,
     ShieldCheck,
@@ -52,8 +53,21 @@ import {
 import { format, addMinutes } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { useToast } from '@/hooks/use-toast'
-import { TaskManager } from '@/components/publish/TaskManager'
+import { usePersistedPublishTab } from '@/hooks/use-persisted-publish-tab'
 import { MultiTaskPublisher } from '@/components/publish/multi-task/MultiTaskPublisher'
+import { TikTokLogo } from '@/components/brand/TikTokLogo'
+import SocialCommentsClient from '@/components/social-comments/SocialCommentsClient'
+import { TikTokCommentsUnavailable } from '@/components/publish/tiktok/TikTokCommentsUnavailable'
+import { TikTokVideoManager } from '@/components/publish/tiktok/TikTokVideoManager'
+import {
+    TikTokFileTransferError,
+    uploadFileDirectlyToTikTok,
+} from '@/lib/tiktok/file-upload-client'
+import {
+    resolveTikTokLocalVideoMimeType,
+    TIKTOK_MAX_LOCAL_FILE_BYTES,
+} from '@/lib/tiktok/local-file'
+import type { TikTokVideoMimeType } from '@/lib/tiktok/content-posting'
 import {
     Dialog,
     DialogContent,
@@ -69,7 +83,6 @@ import {
 
 // TikTok supported video formats
 const TIKTOK_VIDEO_FORMATS = ['.mp4', '.webm', '.mov']
-const TIKTOK_MAX_FILE_SIZE = 4 * 1024 * 1024 * 1024 // 4GB
 const TIKTOK_MAX_DURATION = 10 * 60 * 1000 // 10 minutes in ms
 
 // Privacy dropdown options config (shared between trigger and panel)
@@ -120,6 +133,10 @@ interface SelectedVideo {
     coverTimestampMs?: number  // Cover frame timestamp in milliseconds
     title?: string           // Individual title for this video
     coverOptions?: string[]  // Auto-generated cover options at different time points
+    file?: File
+    sizeBytes?: number
+    mimeType?: TikTokVideoMimeType
+    transferMethod?: 'PULL_FROM_URL' | 'FILE_UPLOAD'
 }
 
 interface PublishTask {
@@ -142,7 +159,14 @@ interface FileUploadStatus {
     error?: string
 }
 
-type TabType = 'create' | 'multiTask' | 'tasks'
+class PublishBackendUpgradePendingError extends Error {
+    constructor() {
+        super('发布服务正在升级，请保留当前文件并稍后重试')
+        this.name = 'PublishBackendUpgradePendingError'
+    }
+}
+
+type CreateMode = 'single' | 'multiTask'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
@@ -152,9 +176,13 @@ export default function PublishPage() {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const assetRequestInFlightRef = useRef(false)
     const assetRequestAbortRef = useRef<AbortController | null>(null)
+    const publishSubmissionInFlightRef = useRef(false)
+    const publishIdempotencyKeyRef = useRef<string | null>(null)
+    const selectedVideoBlobUrlsRef = useRef<Set<string>>(new Set())
 
     // Tab state
-    const [activeTab, setActiveTab] = useState<TabType>('create')
+    const [activeTab, setActiveTab] = usePersistedPublishTab(true)
+    const [createMode, setCreateMode] = useState<CreateMode>('single')
 
     // Create publish form state
     const [videoSource, setVideoSource] = useState<VideoSourceType>('upload')  // Default to local upload
@@ -283,8 +311,25 @@ export default function PublishPage() {
     // Clear task confirmation
     const [showClearConfirm, setShowClearConfirm] = useState(false)
 
+    const revokeSelectedVideoBlobUrl = useCallback((url?: string) => {
+        if (!url?.startsWith('blob:')) return
+        selectedVideoBlobUrlsRef.current.delete(url)
+        URL.revokeObjectURL(url)
+    }, [])
+
+    useEffect(() => () => {
+        for (const url of selectedVideoBlobUrlsRef.current) {
+            URL.revokeObjectURL(url)
+        }
+        selectedVideoBlobUrlsRef.current.clear()
+    }, [])
+
     // Clear all task function
     const clearAllTask = () => {
+        if (publishSubmissionInFlightRef.current) return
+        selectedVideos.forEach(video => {
+            revokeSelectedVideoBlobUrl(video.localUrl)
+        })
         setSelectedVideos([])
         setSelectedAccounts([])
         setCaption('')
@@ -354,7 +399,11 @@ export default function PublishPage() {
 
     // Remove selected video
     const removeVideo = (videoId: string) => {
-        setSelectedVideos(prev => prev.filter(v => v.id !== videoId))
+        setSelectedVideos(prev => {
+            const removed = prev.find(video => video.id === videoId)
+            revokeSelectedVideoBlobUrl(removed?.localUrl)
+            return prev.filter(video => video.id !== videoId)
+        })
     }
 
     // Calculate total tasks
@@ -484,6 +533,14 @@ export default function PublishPage() {
     // Single asset transfer with 1 retry
     const transferSingleAsset = async (asset: AssetItem, retryCount = 0): Promise<boolean> => {
         if (selectedVideos.some(v => v.id === asset.id)) return true // Already added
+        if (selectedVideos.some(video => video.transferMethod === 'FILE_UPLOAD')) {
+            toast({
+                variant: 'destructive',
+                title: '不能混用传输方式',
+                description: '请先清空本地直传文件，再选择素材库视频。',
+            })
+            return false
+        }
 
         setTransferringAssets(prev => new Set(prev).add(asset.id))
 
@@ -510,7 +567,8 @@ export default function PublishPage() {
                 thumbnail: asset.thumbnailUrl || '',
                 url: result.data.url,
                 localUrl: result.data.url,
-                duration: 30
+                duration: 30,
+                transferMethod: 'PULL_FROM_URL',
             }
             setSelectedVideos(prev => [...prev, newVideo])
             return true
@@ -664,7 +722,8 @@ export default function PublishPage() {
         })
     }
 
-    // Handle local file upload - uploads to OSS and gets public URL
+    // Local files stay in the browser until the user confirms publishing. The
+    // browser then uploads them directly to the provider-issued TikTok URL.
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = event.target.files
         if (!files || files.length === 0) return
@@ -673,26 +732,45 @@ export default function PublishPage() {
         const fileList = Array.from(files)
 
         // Validate all files first
-        const validFiles: { file: File; id: string }[] = []
+        const validFiles: { file: File; id: string; mimeType: TikTokVideoMimeType }[] = []
         for (const file of fileList) {
             const ext = '.' + file.name.split('.').pop()?.toLowerCase()
             if (!TIKTOK_VIDEO_FORMATS.includes(ext)) {
                 setUploadError(`不支持的格式: ${ext}。TikTok支持: ${TIKTOK_VIDEO_FORMATS.join(', ')}`)
                 continue
             }
-            if (file.size > TIKTOK_MAX_FILE_SIZE) {
+            if (file.size <= 0) {
+                setUploadError(`文件为空: ${file.name}。请重新选择有效视频`)
+                continue
+            }
+            if (file.size > TIKTOK_MAX_LOCAL_FILE_BYTES) {
                 setUploadError(`文件过大: ${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB。最大: 4GB`)
+                continue
+            }
+            const mimeType = resolveTikTokLocalVideoMimeType({
+                filename: file.name,
+                reportedMimeType: file.type,
+                sizeBytes: file.size,
+            })
+            if (!mimeType) {
+                setUploadError(`文件类型与扩展名不匹配或不受支持: ${file.name}`)
                 continue
             }
             validFiles.push({
                 file,
-                id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+                id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                mimeType,
             })
         }
 
         if (validFiles.length === 0) return
 
-        // Initialize all files as pending
+        if (selectedVideos.some(video => video.transferMethod !== 'FILE_UPLOAD')) {
+            setUploadError('TikTok 本地直传不能与素材库 URL 视频混在同一个任务中')
+            if (fileInputRef.current) fileInputRef.current.value = ''
+            return
+        }
+
         const initialStatus: FileUploadStatus[] = validFiles.map(({ file, id }) => ({
             id,
             name: file.name,
@@ -708,123 +786,32 @@ export default function PublishPage() {
             ))
         }
 
-        // Upload single file directly to OSS with retry logic
-        const uploadSingleFile = async ({ file, id }: { file: File; id: string }) => {
-            const MAX_RETRIES = 2
-            let lastError: Error | null = null
+        const preparedFiles = await Promise.all(validFiles.map(async ({ file, id, mimeType }) => {
+            updateFileStatus(id, { status: 'uploading', progress: 25 })
+            const thumbnail = await generateVideoThumbnail(file)
+            const localBlobUrl = URL.createObjectURL(file)
+            selectedVideoBlobUrlsRef.current.add(localBlobUrl)
+            setSelectedVideos(prev => [...prev, {
+                id,
+                type: 'upload',
+                name: file.name,
+                thumbnail,
+                localUrl: localBlobUrl,
+                duration: 0,
+                file,
+                sizeBytes: file.size,
+                mimeType,
+                transferMethod: 'FILE_UPLOAD',
+            }])
+            updateFileStatus(id, { status: 'done', progress: 100 })
+            return true
+        }))
 
-            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-                updateFileStatus(id, { status: 'uploading', progress: 0, error: undefined })
-
-                try {
-                    // Generate thumbnail while preparing upload (only on first attempt)
-                    const thumbnailPromise = attempt === 1 ? generateVideoThumbnail(file) : Promise.resolve('')
-
-                    // Step 1: Get presigned upload URL from server
-                    updateFileStatus(id, { progress: 5 })
-                    const credentialsRes = await fetch('/api/upload/oss-credentials', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            filename: file.name,
-                            contentType: file.type || 'video/mp4'
-                        })
-                    })
-
-                    if (!credentialsRes.ok) {
-                        const errData = await credentialsRes.json().catch(() => ({}))
-                        throw new Error(errData.error || '获取上传凭证失败')
-                    }
-
-                    const { success, data: credentials } = await credentialsRes.json()
-                    if (!success || !credentials?.uploadUrl) {
-                        throw new Error('获取上传凭证失败')
-                    }
-
-                    // Step 2: Upload directly to OSS using presigned URL
-                    const ossUrl = await new Promise<string>((resolve, reject) => {
-                        const xhr = new XMLHttpRequest()
-
-                        // Track upload progress (10-95%) with throttle
-                        let lastReportedProgress = 10
-                        xhr.upload.onprogress = (event) => {
-                            if (event.lengthComputable) {
-                                // Map 0-100% to 10-95% (leave room for completion steps)
-                                const percent = Math.round(10 + (event.loaded / event.total) * 85)
-                                if (percent >= lastReportedProgress + 5 || percent >= 95) {
-                                    lastReportedProgress = percent
-                                    updateFileStatus(id, { progress: percent })
-                                }
-                            }
-                        }
-
-                        xhr.onload = () => {
-                            // OSS returns 200 on success for PUT
-                            if (xhr.status >= 200 && xhr.status < 300) {
-                                resolve(credentials.publicUrl)
-                            } else {
-                                reject(new Error(`OSS上传失败 (${xhr.status})`))
-                            }
-                        }
-
-                        xhr.onerror = () => reject(new Error('网络错误'))
-                        xhr.ontimeout = () => reject(new Error('上传超时'))
-
-                        // PUT file directly to OSS
-                        xhr.open('PUT', credentials.uploadUrl)
-                        xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
-                        xhr.timeout = 600000 // 10 minutes for large files
-                        xhr.send(file)
-                    })
-
-                    updateFileStatus(id, { progress: 98 })
-
-                    // Wait for thumbnail
-                    const thumbnail = await thumbnailPromise
-
-                    // Create video entry with OSS URL and local blob URL for frame capture
-                    const localBlobUrl = URL.createObjectURL(file)
-                    const newVideo: SelectedVideo = {
-                        id,
-                        type: 'upload',
-                        name: file.name,
-                        thumbnail: thumbnail || '',
-                        url: ossUrl,
-                        localUrl: localBlobUrl,
-                        duration: 0
-                    }
-                    setSelectedVideos(prev => [...prev, newVideo])
-
-                    updateFileStatus(id, { status: 'done', progress: 100 })
-                    return // Success, exit retry loop
-
-                } catch (error) {
-                    lastError = error instanceof Error ? error : new Error('上传失败')
-                    console.error(`Video upload error (attempt ${attempt}/${MAX_RETRIES}):`, error)
-
-                    if (attempt < MAX_RETRIES) {
-                        updateFileStatus(id, { progress: 0, error: `重试中 (${attempt}/${MAX_RETRIES})...` })
-                        await new Promise(resolve => setTimeout(resolve, attempt * 1000))
-                    }
-                }
-            }
-
-            // All retries failed
-            updateFileStatus(id, {
-                status: 'error',
-                progress: 0,
-                error: lastError?.message || '上传失败'
-            })
+        if (preparedFiles.every(Boolean)) {
+            setTimeout(() => {
+                setUploadingFiles([])
+            }, 2000)
         }
-
-        // ✅ True concurrent upload - all files at once!
-        // Browser uploads directly to OSS, no server bottleneck
-        await Promise.all(validFiles.map(uploadSingleFile))
-
-        // Clear upload status after delay
-        setTimeout(() => {
-            setUploadingFiles([])
-        }, 2000)
 
         // Reset input
         if (fileInputRef.current) {
@@ -924,14 +911,15 @@ export default function PublishPage() {
             setExpandedVideoId(null)
         } else {
             const video = selectedVideos.find(v => v.id === videoId)
-            if (!video?.url) return
+            const previewUrl = video?.localUrl || video?.url
+            if (!video || !previewUrl) return
 
             // For remote OSS videos, generate a proxy URL that returns correct headers
             // This avoids the Content-Disposition: attachment issue
             const isLocalUrl = video.localUrl?.startsWith('blob:')
             const hasProxyUrl = videoBlobCache[videoId]
 
-            if (!isLocalUrl && !hasProxyUrl && video.url.includes('media.toryxai.com')) {
+            if (!isLocalUrl && !hasProxyUrl && video.url?.includes('media.toryxai.com')) {
                 // Generate proxy URL for OSS videos
                 const proxyUrl = `/api/proxy/video?url=${encodeURIComponent(video.url)}`
                 setVideoBlobCache(prev => ({ ...prev, [videoId]: proxyUrl }))
@@ -940,8 +928,8 @@ export default function PublishPage() {
 
             setExpandedVideoId(videoId)
             // Generate cover options if not already generated
-            if (video.url && (!video.coverOptions || video.coverOptions.length === 0)) {
-                const options = await generateCoverOptions(video.url)
+            if (!video.coverOptions || video.coverOptions.length === 0) {
+                const options = await generateCoverOptions(previewUrl)
                 setSelectedVideos(prev => prev.map(v =>
                     v.id === videoId ? { ...v, coverOptions: options } : v
                 ))
@@ -1121,6 +1109,7 @@ export default function PublishPage() {
 
     // Handle publish
     const handlePublish = async () => {
+        if (publishSubmissionInFlightRef.current) return
         if (selectedVideos.length === 0) {
             setPublishError('请至少选择一个视频')
             return
@@ -1146,6 +1135,26 @@ export default function PublishPage() {
             return
         }
 
+
+        const directFileUpload = selectedVideos.every(
+            video => video.transferMethod === 'FILE_UPLOAD'
+        )
+        if (
+            selectedVideos.some(video => video.transferMethod === 'FILE_UPLOAD')
+            && !directFileUpload
+        ) {
+            setPublishError('本地直传文件不能与素材库 URL 视频混在同一个任务中')
+            return
+        }
+        if (directFileUpload && publishMode !== 'now') {
+            setPublishError('TikTok 本地文件直传仅支持立即发布')
+            return
+        }
+        if (directFileUpload && selectedVideos.some(video => !video.file || !video.mimeType)) {
+            setPublishError('本地文件已从浏览器中失效，请重新选择视频')
+            return
+        }
+
         // 多视频无间隔提示：3条以上视频 + 立即发布 + 间隔为0
         const actualInterval = intervalMode === 'custom' ? customInterval : parseInt(intervalMode)
         if (publishMode === 'now' && selectedVideos.length >= 3 && actualInterval === 0) {
@@ -1158,40 +1167,217 @@ export default function PublishPage() {
             if (!confirmed) return
         }
 
+        publishSubmissionInFlightRef.current = true
+        const idempotencyKey = publishIdempotencyKeyRef.current || crypto.randomUUID()
+        publishIdempotencyKeyRef.current = idempotencyKey
         setIsPublishing(true)
         setPublishError(null)
+        let taskCreated = false
 
         try {
-            const response = await fetch('/api/publish/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: taskGroupName,
-                    videos: selectedVideos,
-                    account_ids: selectedAccounts,
-                    caption,
-                    // TikTok 审核合规字段
-                    privacy_level: privacyLevel,
-                    allow_comment: allowComment,
-                    allow_duet: allowDuet,
-                    allow_stitch: allowStitch,
-                    brand_content_toggle: brandedContent,
-                    brand_organic_toggle: yourBrand,
-                    is_ai_generated: isAiGenerated,
-                    publish_mode: publishMode,
-                    scheduled_at: publishMode === 'scheduled'
-                        ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
-                        : null,
-                    batch_interval: intervalMode === 'custom' ? customInterval : parseInt(intervalMode)
-                })
-            })
+            const response = await fetch(
+                directFileUpload ? '/api/publish/file-tasks' : '/api/publish/tasks',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        idempotency_key: idempotencyKey,
+                        name: taskGroupName,
+                        videos: selectedVideos.map(video => ({
+                            id: video.id,
+                            type: video.type,
+                            name: video.name,
+                            url: directFileUpload ? undefined : video.url,
+                            title: video.title,
+                            coverTimestampMs: video.coverTimestampMs,
+                            sizeBytes: directFileUpload ? video.sizeBytes : undefined,
+                            mimeType: directFileUpload ? video.mimeType : undefined,
+                        })),
+                        account_ids: selectedAccounts,
+                        caption,
+                        // TikTok 审核合规字段
+                        privacy_level: privacyLevel,
+                        allow_comment: allowComment,
+                        allow_duet: allowDuet,
+                        allow_stitch: allowStitch,
+                        brand_content_toggle: brandedContent,
+                        brand_organic_toggle: yourBrand,
+                        is_ai_generated: isAiGenerated,
+                        publish_mode: publishMode,
+                        scheduled_at: publishMode === 'scheduled'
+                            ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+                            : null,
+                        batch_interval: intervalMode === 'custom' ? customInterval : parseInt(intervalMode),
+                        transfer_method: directFileUpload ? 'FILE_UPLOAD' : 'PULL_FROM_URL',
+                    })
+                }
+            )
 
+            const result = await response.json().catch(() => null)
             if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || '创建发布任务失败')
+                if (directFileUpload && (response.status === 404 || response.status === 405)) {
+                    throw new PublishBackendUpgradePendingError()
+                }
+                if (response.status === 400) {
+                    publishIdempotencyKeyRef.current = null
+                }
+                throw new Error(result?.error || '创建发布任务失败')
+            }
+            taskCreated = true
+            if (!directFileUpload) {
+                publishIdempotencyKeyRef.current = null
+            }
+
+            if (directFileUpload) {
+                const uploadItems = Array.isArray(result.upload_items) ? result.upload_items as Array<{
+                    id: string
+                    account_id: string
+                    source_video_id: string
+                }> : []
+                const expectedCount = selectedVideos.length * selectedAccounts.length
+                if (uploadItems.length !== expectedCount) {
+                    throw new Error('任务已创建，但直传任务项不完整；请勿重复创建，在任务列表中检查状态')
+                }
+
+                setUploadingFiles(uploadItems.map(uploadItem => {
+                    const video = selectedVideos.find(item => item.id === uploadItem.source_video_id)
+                    const account = accounts.find(item => item.id === uploadItem.account_id)
+                    return {
+                        id: uploadItem.id,
+                        name: `${video?.name || '未知视频'} → ${account?.display_name ? `@${account.display_name}` : 'TikTok 账号'}`,
+                        progress: 0,
+                        status: 'pending' as const,
+                    }
+                }))
+
+                let failedUploads = 0
+                let backendUpgradePending = false
+                for (const uploadItem of uploadItems) {
+                    const video = selectedVideos.find(item => item.id === uploadItem.source_video_id)
+                    if (!video?.file || !video.mimeType) {
+                        failedUploads += 1
+                        setUploadingFiles(current => current.map(file => (
+                            file.id === uploadItem.id
+                                ? { ...file, status: 'error', progress: 0, error: '本地文件已失效，请重新选择视频' }
+                                : file
+                        )))
+                        continue
+                    }
+
+                    try {
+                        setUploadingFiles(current => current.map(file => (
+                            file.id === uploadItem.id
+                                ? { ...file, status: 'uploading', progress: 0, error: undefined }
+                                : file
+                        )))
+                        const initResponse = await fetch(
+                            `/api/publish/tasks/${result.task.id}/items/${uploadItem.id}/file-upload/init`,
+                            { method: 'POST' }
+                        )
+                        const initialized = await initResponse.json().catch(() => null)
+                        if (initResponse.status === 404 || initResponse.status === 405) {
+                            throw new PublishBackendUpgradePendingError()
+                        }
+                        if (!initResponse.ok || !initialized?.success || !initialized?.data) {
+                            throw new Error(initialized?.error || 'TikTok 文件直传初始化失败')
+                        }
+
+                        let uploadOutcome: 'accepted' | 'unknown' | 'rejected' = 'accepted'
+                        let transferError: Error | null = null
+                        try {
+                            await uploadFileDirectlyToTikTok({
+                                uploadUrl: initialized.data.uploadUrl,
+                                file: video.file,
+                                mimeType: video.mimeType,
+                                chunkSize: initialized.data.chunkSize,
+                                totalChunkCount: initialized.data.totalChunkCount,
+                                onProgress(progress) {
+                                    setUploadingFiles(current => current.map(file => (
+                                        file.id === uploadItem.id ? { ...file, progress } : file
+                                    )))
+                                },
+                            })
+                        } catch (error) {
+                            transferError = error instanceof Error
+                                ? error
+                                : new Error('TikTok 文件传输结果无法确认')
+                            uploadOutcome = error instanceof TikTokFileTransferError
+                                && error.code === 'upload_rejected'
+                                ? 'rejected'
+                                : 'unknown'
+                        }
+
+                        const completionResponse = await fetch(
+                            `/api/publish/tasks/${result.task.id}/items/${uploadItem.id}/file-upload/complete`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    attempt: initialized.data.attempt,
+                                    uploadOutcome,
+                                }),
+                            }
+                        )
+                        const completion = await completionResponse.json().catch(() => null)
+                        if (!completionResponse.ok || !completion?.success) {
+                            throw new Error(completion?.error || 'TikTok 文件已发送，但状态确认失败')
+                        }
+                        if (uploadOutcome !== 'accepted' && completion.outcome !== 'success') {
+                            throw transferError ?? new Error('TikTok 文件传输结果无法确认，请检查任务状态')
+                        }
+                        setUploadingFiles(current => current.map(file => (
+                            file.id === uploadItem.id
+                                ? { ...file, status: 'done', progress: 100, error: undefined }
+                                : file
+                        )))
+                    } catch (uploadError) {
+                        failedUploads += 1
+                        if (uploadError instanceof PublishBackendUpgradePendingError) {
+                            backendUpgradePending = true
+                        }
+                        setUploadingFiles(current => current.map(file => (
+                            file.id === uploadItem.id
+                                ? {
+                                    ...file,
+                                    status: 'error',
+                                    error: uploadError instanceof Error
+                                        ? uploadError.message
+                                        : 'TikTok 文件直传失败，请在任务列表检查状态',
+                                }
+                                : file
+                        )))
+                    }
+                }
+
+                if (backendUpgradePending) {
+                    setPublishError('发布服务正在升级。原文件和发布请求已保留，稍后再次点击发布会继续同一任务。')
+                    toast({
+                        variant: 'destructive',
+                        title: '发布服务正在升级',
+                        description: '请保留当前页面和文件，稍后再次点击发布；系统不会创建第二个任务。',
+                    })
+                    return
+                }
+
+                if (failedUploads > 0) {
+                    toast({
+                        variant: 'destructive',
+                        title: '部分文件未完成直传',
+                        description: '任务已经创建，请勿重复发布；请在任务列表查看需要处理的项目。',
+                    })
+                } else {
+                    toast({
+                        title: 'TikTok 已接收文件',
+                        description: '发布状态会在任务列表中继续确认。',
+                    })
+                }
             }
 
             // Success - reset form and switch to history tab
+            publishIdempotencyKeyRef.current = null
+            selectedVideos.forEach(video => {
+                revokeSelectedVideoBlobUrl(video.localUrl)
+            })
             setSelectedVideos([])
             setSelectedAccounts([])
             setCaption('')
@@ -1205,8 +1391,35 @@ export default function PublishPage() {
             setCreatorInfo(null)
             setActiveTab('tasks')
         } catch (error) {
-            setPublishError(error instanceof Error ? error.message : '创建发布任务失败')
+            if (error instanceof PublishBackendUpgradePendingError) {
+                setPublishError('发布服务正在升级。原文件和发布请求已保留，稍后再次点击发布即可安全重试。')
+                toast({
+                    variant: 'destructive',
+                    title: '发布服务正在升级',
+                    description: '当前没有创建旧版占位任务；请保留页面和文件，稍后重试。',
+                })
+                return
+            }
+            if (taskCreated) {
+                publishIdempotencyKeyRef.current = null
+                selectedVideos.forEach(video => {
+                    revokeSelectedVideoBlobUrl(video.localUrl)
+                })
+                setSelectedVideos([])
+                setSelectedAccounts([])
+                setActiveTab('tasks')
+                setPublishError(
+                    '发布任务已经创建，但后续处理未完成。请勿重复创建，请在任务列表中检查状态。'
+                )
+            } else {
+                setPublishError(
+                    error instanceof Error && error.message
+                        ? `${error.message}；若创建结果不明确，请保持当前内容并再次点击发布，系统会复用同一任务`
+                        : '创建结果暂时无法确认；请保持当前内容并再次点击发布'
+                )
+            }
         } finally {
+            publishSubmissionInFlightRef.current = false
             setIsPublishing(false)
         }
     }
@@ -1217,8 +1430,8 @@ export default function PublishPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                        <div className="h-8 w-1.5 rounded-full bg-gradient-to-b from-mermaid-lime to-mermaid-cyan shadow-[0_0_10px_rgba(0,242,234,0.5)]" />
-                        <span className="text-white drop-shadow-lg">TikTok 视频发布</span>
+                        <TikTokLogo className="h-8 w-8 shrink-0 text-white" />
+                        <span className="text-white drop-shadow-lg">TikTok 视频管理</span>
                     </h1>
                     <p className="mt-1 text-white/60 ml-[19px]">
                         视频发布至 TikTok，支持多条内容预约发布
@@ -1226,7 +1439,7 @@ export default function PublishPage() {
                 </div>
 
                 <button
-                    onClick={() => router.push('/publish/accounts')}
+                    onClick={() => router.push('/tiktok-publish/accounts')}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all"
                 >
                     <Settings className="w-4 h-4 text-white/70" />
@@ -1237,9 +1450,9 @@ export default function PublishPage() {
             {/* Tabs - JCUI 2.0 Fluid Segmented Controls with Holographic Gradient */}
             <div className="flex gap-1 p-1.5 bg-black/40 rounded-xl border border-white/10 w-fit backdrop-blur-md">
                 {[
-                    { id: 'create' as TabType, label: '创建发布', icon: Send },
-                    { id: 'multiTask' as TabType, label: '多任务发布', icon: ListFilter },
-                    { id: 'tasks' as TabType, label: '任务管理', icon: ListFilter }
+                    { id: 'create' as const, label: '创建发布', icon: Send },
+                    { id: 'tasks' as const, label: '视频列表', icon: ListFilter },
+                    { id: 'comments' as const, label: '评论管理', icon: MessageCircle }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -1267,7 +1480,29 @@ export default function PublishPage() {
             {/* Tab Content */}
             {activeTab === 'create' && (
                 <div className="space-y-6">
+                    <div className="flex w-fit gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+                        {[
+                            { id: 'single' as const, label: '单次发布', icon: Send },
+                            { id: 'multiTask' as const, label: '多任务发布', icon: ListFilter },
+                        ].map(mode => (
+                            <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() => setCreateMode(mode.id)}
+                                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                                    createMode === mode.id
+                                        ? 'bg-white/15 text-white'
+                                        : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+                                }`}
+                            >
+                                <mode.icon className="h-4 w-4" />
+                                {mode.label}
+                            </button>
+                        ))}
+                    </div>
 
+                    {createMode === 'single' ? (
+                    <>
                     {/* Step 1: Select Videos */}
                     <section className="bg-white/5 rounded-2xl border border-white/10 p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -1281,7 +1516,8 @@ export default function PublishPage() {
                                 {selectedVideos.length > 0 && (
                                     <button
                                         onClick={() => setShowClearConfirm(true)}
-                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                                        disabled={isPublishing}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <Trash2 className="w-3 h-3" />
                                         清空任务
@@ -1371,13 +1607,15 @@ export default function PublishPage() {
                                         <div className="p-2 rounded-full bg-cyan-500/10">
                                             {uploadingFiles.every(f => f.status === 'done') ? (
                                                 <CheckCircle2 className="w-5 h-5 text-cyan-400" />
+                                            ) : uploadingFiles.some(f => f.status === 'error') ? (
+                                                <AlertCircle className="w-5 h-5 text-red-400" />
                                             ) : (
                                                 <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
                                             )}
                                         </div>
                                         <div>
                                             <h3 className="text-sm font-semibold text-white">
-                                                正在上传 {uploadingFiles.length} 个视频
+                                                正在准备或直传 {uploadingFiles.length} 个发布项
                                             </h3>
                                             <p className="text-xs text-gray-400 mt-0.5">
                                                 {uploadingFiles.filter(f => f.status === 'done').length}/{uploadingFiles.length} 完成
@@ -1435,9 +1673,36 @@ export default function PublishPage() {
                                                                 `${file.progress}%`}
                                                     </span>
                                                 </div>
+                                                {file.status === 'error' && file.error && (
+                                                    <p className="mt-1 break-words text-[11px] leading-4 text-red-300">
+                                                        {file.error}
+                                                    </p>
+                                                )}
                                                 {/* Mini individual bar for active uploads */}
 
                                             </div>
+                                            {file.status === 'error' && (
+                                                <div className="flex shrink-0 items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setUploadingFiles(current => current.filter(item => item.id !== file.id))
+                                                            fileInputRef.current?.click()
+                                                        }}
+                                                        className="rounded px-2 py-1 text-[11px] text-cyan-300 hover:bg-cyan-500/10"
+                                                    >
+                                                        重新选择
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`关闭 ${file.name} 上传错误`}
+                                                        onClick={() => setUploadingFiles(current => current.filter(item => item.id !== file.id))}
+                                                        className="rounded p-1 text-gray-500 hover:bg-white/10 hover:text-white"
+                                                    >
+                                                        <X className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -1464,10 +1729,10 @@ export default function PublishPage() {
                                             alt={video.name}
                                             className="absolute inset-0 w-full h-full object-cover"
                                         />
-                                    ) : video.url ? (
+                                    ) : (video.localUrl || video.url) ? (
                                         /* Show video preview if URL available but no thumbnail */
                                         <video
-                                            src={video.url}
+                                            src={video.localUrl || video.url}
                                             className="absolute inset-0 w-full h-full object-cover"
                                             muted
                                             playsInline
@@ -1501,7 +1766,7 @@ export default function PublishPage() {
                                     <div className="absolute bottom-0 left-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <div className="flex items-center justify-center gap-1 p-2 bg-black/70 backdrop-blur-sm">
                                             {/* Cover edit button - only show when useDefaultCover is OFF */}
-                                            {!useDefaultCover && video.url && (
+                                            {!useDefaultCover && (video.localUrl || video.url) && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); toggleVideoExpanded(video.id); }}
                                                     className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 text-white hover:bg-cyan-500/50 transition-colors text-xs"
@@ -1543,7 +1808,7 @@ export default function PublishPage() {
                                 ) : (
                                     <>
                                         <Upload className="w-8 h-8" />
-                                        <span className="text-xs text-center px-2">上传视频<br /><span className="text-[10px] text-gray-500">.mp4 .webm .mov</span></span>
+                                        <span className="text-xs text-center px-2">选择本地视频<br /><span className="text-[10px] text-gray-500">发布时直传 TikTok</span></span>
                                     </>
                                 )}
                             </button>
@@ -1568,7 +1833,7 @@ export default function PublishPage() {
                             </h2>
                             <div className="flex items-center gap-3">
                                 <button
-                                    onClick={() => router.push('/publish/accounts')}
+                                    onClick={() => router.push('/tiktok-publish/accounts')}
                                     className="group relative flex items-center gap-1.5 px-4 py-2 rounded-lg overflow-hidden bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899] text-black font-bold text-sm transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(0,242,234,0.4)]"
                                 >
                                     {/* Glass shine */}
@@ -1586,10 +1851,10 @@ export default function PublishPage() {
                             </div>
                         ) : accounts.length === 0 ? (
                             <div className="text-center py-8">
-                                <Users className="w-12 h-12 mx-auto mb-3 text-gray-500" />
+                                <TikTokLogo className="mx-auto mb-3 h-12 w-12 text-white/40" />
                                 <p className="text-gray-400 mb-4">还没有绑定 TikTok 账号</p>
                                 <button
-                                    onClick={() => router.push('/publish/accounts')}
+                                    onClick={() => router.push('/tiktok-publish/accounts')}
                                     className="group relative px-5 py-2 rounded-full font-bold text-black text-sm overflow-hidden transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(0,242,234,0.5)] bg-gradient-to-r from-[#CCFF00] via-[#00F2EA] to-[#EC4899]"
                                 >
                                     {/* Strong glass shine - top half highlight */}
@@ -1685,7 +1950,7 @@ export default function PublishPage() {
 
                                 {/* Add New Button */}
                                 <button
-                                    onClick={() => router.push('/publish/accounts')}
+                                    onClick={() => router.push('/tiktok-publish/accounts')}
                                     className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all group min-h-[80px]"
                                 >
                                     <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all">
@@ -2592,11 +2857,15 @@ export default function PublishPage() {
 
                                 <button
                                     onClick={() => {
+                                        selectedVideos.forEach(video => {
+                                            revokeSelectedVideoBlobUrl(video.localUrl)
+                                        })
                                         setSelectedVideos([])
                                         setSelectedAccounts([])
                                         setCaption('')
                                     }}
-                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm"
+                                    disabled={isPublishing}
+                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     取消
                                 </button>
@@ -2658,22 +2927,32 @@ export default function PublishPage() {
                             </div>
                         </div>
                     </div>
-                </div >
+                    </>
+                    ) : (
+                        <MultiTaskPublisher onCreated={() => setActiveTab('tasks')} />
+                    )}
+                </div>
             )
             }
 
-            {activeTab === 'multiTask' && (
-                <MultiTaskPublisher onCreated={() => setActiveTab('tasks')} />
-            )}
-
-            {/* Task Manager Tab */}
+            {/* Video List Tab */}
             {
                 activeTab === 'tasks' && (
-                    <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-                        <TaskManager />
-                    </div>
+                    <TikTokVideoManager />
                 )
             }
+
+            {activeTab === 'comments' && (
+                process.env.NEXT_PUBLIC_TIKTOK_COMMENTS_ENABLED === 'true'
+                    ? (
+                        <SocialCommentsClient
+                            platformLock="tiktok"
+                            embedded
+                            tiktokReplyEnabled={process.env.NEXT_PUBLIC_TIKTOK_COMMENTS_REPLY_ENABLED === 'true'}
+                        />
+                    )
+                    : <TikTokCommentsUnavailable embedded />
+            )}
 
             {/* Asset Selector Modal (视频制作区选择器) */}
             {
@@ -2934,7 +3213,8 @@ export default function PublishPage() {
                                     </button>
                                     <button
                                         onClick={clearAllTask}
-                                        className="flex-1 px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                                        disabled={isPublishing}
+                                        className="flex-1 px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                         确认清空

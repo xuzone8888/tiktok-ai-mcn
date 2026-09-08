@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Instagram,
   MessageCircle,
-  Music2,
   RefreshCw,
   Send,
 } from "lucide-react"
@@ -16,6 +15,7 @@ import {
 import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon"
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon"
 import { Button } from "@/components/ui/button"
+import { TikTokLogo } from "@/components/brand/TikTokLogo"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -50,6 +50,7 @@ interface SocialCommentsClientProps {
   initialSyncDelayMs?: number
   translationStartDelayMs?: number
   instagramReplyEnabled?: boolean
+  tiktokReplyEnabled?: boolean
 }
 
 interface LoadErrorState {
@@ -65,6 +66,7 @@ const INITIAL_SYNC_WINDOW_MS = 60 * 1000
 const TEXT = {
   title: { zh: "评论管理", en: "Comments" },
   youtubeTitle: { zh: "YouTube 评论管理", en: "YouTube Comments" },
+  tiktokTitle: { zh: "TikTok 评论管理", en: "TikTok Comments" },
   instagramTitle: { zh: "Instagram 评论管理", en: "Instagram Comment Management" },
   facebookTitle: { zh: "Facebook 评论管理", en: "Facebook Comment Management" },
   subtitle: {
@@ -74,6 +76,10 @@ const TEXT = {
   youtubeSubtitle: {
     zh: "读取已发布 YouTube 视频评论，并使用绑定频道人工回复。",
     en: "Read comments on published YouTube videos and reply manually from the connected channel.",
+  },
+  tiktokSubtitle: {
+    zh: "读取通过本平台发布的 TikTok 视频评论，并在评论授权和回复开关启用后人工回复。",
+    en: "Read comments on TikTok videos published through this platform and reply manually when comment authorization and the reply rollout are enabled.",
   },
   instagramSubtitle: {
     zh: "读取通过本平台发布的 Instagram 内容评论，并使用绑定账号手动回复。",
@@ -86,19 +92,23 @@ const TEXT = {
   platform: { zh: "平台", en: "Platform" },
   account: { zh: "账号", en: "Account" },
   youtubeAccount: { zh: "YouTube 频道", en: "YouTube channel" },
+  tiktokAccount: { zh: "TikTok 账号", en: "TikTok account" },
   instagramAccount: { zh: "Instagram 账号", en: "Instagram account" },
   facebookAccount: { zh: "Facebook Page", en: "Facebook Page" },
   content: { zh: "内容", en: "Content" },
   youtubeContent: { zh: "YouTube 视频", en: "YouTube video" },
+  tiktokContent: { zh: "TikTok 视频", en: "TikTok video" },
   instagramContent: { zh: "Instagram 内容", en: "Instagram content" },
   facebookContent: { zh: "Facebook 视频", en: "Facebook video" },
   allPlatforms: { zh: "全部平台", en: "All platforms" },
   allAccounts: { zh: "全部账号", en: "All accounts" },
   selectYoutubeChannel: { zh: "选择 YouTube 频道", en: "Select a YouTube channel" },
+  selectTikTokAccount: { zh: "选择 TikTok 账号", en: "Select a TikTok account" },
   selectInstagramAccount: { zh: "选择 Instagram 账号", en: "Select an Instagram account" },
   selectFacebookAccount: { zh: "选择 Facebook Page", en: "Select a Facebook Page" },
   allContent: { zh: "全部内容", en: "All content" },
   selectYoutubeVideo: { zh: "选择已发布视频", en: "Select a published video" },
+  selectTikTokVideo: { zh: "选择已发布 TikTok 视频", en: "Select a published TikTok video" },
   selectInstagramContent: { zh: "选择已发布内容", en: "Select published content" },
   selectFacebookContent: { zh: "选择已发布视频", en: "Select a published video" },
   syncSelected: { zh: "同步所选内容", en: "Sync selected" },
@@ -241,6 +251,7 @@ const TEXT = {
   replies: { zh: "条回复", en: "replies" },
   fromAccount: { zh: "账号回复", en: "Account reply" },
   openOnYouTube: { zh: "打开 YouTube 原视频", en: "Open on YouTube" },
+  openOnTikTok: { zh: "在 TikTok 打开", en: "Open on TikTok" },
   openOnInstagram: { zh: "在 Instagram 打开", en: "Open on Instagram" },
   openOnFacebook: { zh: "在 Facebook 打开", en: "Open on Facebook" },
   openComment: { zh: "打开原评论", en: "Open comment" },
@@ -270,7 +281,7 @@ const PLATFORM_STYLES: Record<ConcretePlatform, string> = {
 
 function PlatformIcon({ platform, className }: { platform: Platform; className?: string }) {
   if (platform === "youtube") return <YouTubeBrandIcon className={className} />
-  if (platform === "tiktok") return <Music2 className={className} />
+  if (platform === "tiktok") return <TikTokLogo className={className} />
   if (platform === "instagram") return <Instagram className={className} />
   if (platform === "facebook") return <FacebookBrandIcon className={className} />
   return <MessageCircle className={className} />
@@ -340,6 +351,23 @@ function createReplyIdempotencyKey(commentId: string) {
   return `${commentId}-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+async function replyAttemptStorageKey(commentId: string, message: string) {
+  if (
+    typeof crypto === "undefined"
+    || !crypto.subtle
+    || typeof TextEncoder === "undefined"
+  ) {
+    return null
+  }
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(message))
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")
+    return `social-comment-reply:${commentId}:${hash}`
+  } catch {
+    return null
+  }
+}
+
 function formatDate(value: string | null, lang: "zh" | "en") {
   if (!value) return ""
   const date = new Date(value)
@@ -367,10 +395,18 @@ function getContentLabel(content: ContentItem) {
   return content.task_name ? `${content.title} · ${content.task_name}` : content.title
 }
 
-function isCommentReplyPlatformEnabled(comment: SocialComment, instagramReplyEnabled: boolean) {
+function isCommentReplyPlatformEnabled(
+  comment: SocialComment,
+  instagramReplyEnabled: boolean,
+  tiktokReplyEnabled: boolean,
+) {
   const capability = getSocialCommentPlatformCapabilities(comment.platform)
   return capability.reply === "supported"
-    || (capability.reply === "feature_flag" && comment.platform === "instagram" && instagramReplyEnabled)
+    || (capability.reply === "feature_flag"
+      && (
+        (comment.platform === "instagram" && instagramReplyEnabled)
+        || (comment.platform === "tiktok" && tiktokReplyEnabled)
+      ))
 }
 
 type TranslationUiState = {
@@ -429,10 +465,12 @@ export default function SocialCommentsClient({
   initialSyncDelayMs = 0,
   translationStartDelayMs = 0,
   instagramReplyEnabled = false,
+  tiktokReplyEnabled = false,
 }: SocialCommentsClientProps) {
   const { lang } = useLang()
   const { toast } = useToast()
   const isYouTubeLocked = platformLock === "youtube"
+  const isTikTokLocked = platformLock === "tiktok"
   const isInstagramLocked = platformLock === "instagram"
   const isFacebookLocked = platformLock === "facebook"
   const lastAutoSyncAtByTarget = useRef<Map<string, number>>(new Map())
@@ -449,6 +487,7 @@ export default function SocialCommentsClient({
   const workspaceGuardRef = useRef(createWorkspaceRequestGuard("all:all"))
   const syncRequestTokenRef = useRef<symbol | null>(null)
   const autoSyncRequestTokenRef = useRef<symbol | null>(null)
+  const replyAttemptKeysRef = useRef(new Map<string, string>())
   const [platform, setPlatform] = useState<Platform>(platformLock || "all")
   const [accountId, setAccountId] = useState(() => initialAccounts[0]?.id || "all")
   const [contentId, setContentId] = useState("all")
@@ -557,7 +596,7 @@ export default function SocialCommentsClient({
     comment.direction === "inbound"
       && comment.can_reply
       && accountById.get(comment.account_id)?.comment_capability === "ready"
-      && isCommentReplyPlatformEnabled(comment, instagramReplyEnabled)
+      && isCommentReplyPlatformEnabled(comment, instagramReplyEnabled, tiktokReplyEnabled)
   )
   const replyableInboxComments = inboxComments.filter(canReplyToComment)
   const allReplyableSelected = replyableInboxComments.length > 0
@@ -1146,7 +1185,47 @@ export default function SocialCommentsClient({
     }
   }, [attemptAutoSync, autoSyncTargetKey, canAttemptAutoSync])
 
-  const postReply = async (comment: SocialComment, message: string) => {
+  const getReplyAttempt = async (comment: SocialComment, message: string) => {
+    const attemptId = `${comment.id}\u0000${message}`
+    const storageKey = await replyAttemptStorageKey(comment.id, message)
+    const existing = replyAttemptKeysRef.current.get(attemptId)
+    if (existing) return { attemptId, storageKey, idempotencyKey: existing }
+    if (storageKey) {
+      try {
+        const persisted = window.localStorage.getItem(storageKey)
+        if (persisted) {
+          replyAttemptKeysRef.current.set(attemptId, persisted)
+          return { attemptId, storageKey, idempotencyKey: persisted }
+        }
+      } catch {
+        // Storage can be unavailable in hardened browser contexts; the in-memory
+        // key still protects retries for the current page lifetime.
+      }
+    }
+    const idempotencyKey = createReplyIdempotencyKey(comment.id)
+    replyAttemptKeysRef.current.set(attemptId, idempotencyKey)
+    if (storageKey) {
+      try {
+        window.localStorage.setItem(storageKey, idempotencyKey)
+      } catch {
+        // See the read fallback above.
+      }
+    }
+    return { attemptId, storageKey, idempotencyKey }
+  }
+
+  const clearReplyAttempt = (attemptId: string, storageKey: string | null) => {
+    replyAttemptKeysRef.current.delete(attemptId)
+    if (storageKey) {
+      try {
+        window.localStorage.removeItem(storageKey)
+      } catch {
+        // No-op when storage is unavailable.
+      }
+    }
+  }
+
+  const postReply = async (comment: SocialComment, message: string, idempotencyKey: string) => {
     await fetch(`/api/social-comments/${comment.id}/reply`, {
       method: "POST",
       headers: {
@@ -1155,7 +1234,7 @@ export default function SocialCommentsClient({
       },
       body: JSON.stringify({
         message,
-        idempotencyKey: createReplyIdempotencyKey(comment.id),
+        idempotencyKey,
       }),
     }).then(readJson)
   }
@@ -1165,10 +1244,12 @@ export default function SocialCommentsClient({
     if (!message) return
     const workspaceToken = workspaceGuardRef.current.capture()
     const replyTarget = { platform: comment.platform, accountId: comment.account_id }
+    const attempt = await getReplyAttempt(comment, message)
 
     setReplying((prev) => new Set(prev).add(comment.id))
     try {
-      await postReply(comment, message)
+      await postReply(comment, message, attempt.idempotencyKey)
+      clearReplyAttempt(attempt.attemptId, attempt.storageKey)
 
       if (workspaceGuardRef.current.isActive(workspaceToken)) {
         setDrafts((prev) => ({ ...prev, [comment.id]: "" }))
@@ -1218,8 +1299,10 @@ export default function SocialCommentsClient({
     for (const comment of targets) {
       if (!workspaceGuardRef.current.isActive(workspaceToken)) break
       setReplying((prev) => new Set(prev).add(comment.id))
+      const attempt = await getReplyAttempt(comment, message)
       try {
-        await postReply(comment, message)
+        await postReply(comment, message, attempt.idempotencyKey)
+        clearReplyAttempt(attempt.attemptId, attempt.storageKey)
         successfulIds.add(comment.id)
       } catch {
         failedCount += 1
@@ -1269,6 +1352,8 @@ export default function SocialCommentsClient({
   const capabilityNotice = selectedAccount?.comment_capability
   const pageTitle = isYouTubeLocked
     ? TEXT.youtubeTitle[lang]
+    : isTikTokLocked
+      ? TEXT.tiktokTitle[lang]
     : isInstagramLocked
       ? TEXT.instagramTitle[lang]
       : isFacebookLocked
@@ -1276,6 +1361,8 @@ export default function SocialCommentsClient({
         : TEXT.title[lang]
   const pageSubtitle = isYouTubeLocked
     ? TEXT.youtubeSubtitle[lang]
+    : isTikTokLocked
+      ? TEXT.tiktokSubtitle[lang]
     : isInstagramLocked
       ? TEXT.instagramSubtitle[lang]
       : isFacebookLocked
@@ -1283,6 +1370,8 @@ export default function SocialCommentsClient({
         : TEXT.subtitle[lang]
   const accountLabel = isYouTubeLocked
     ? TEXT.youtubeAccount[lang]
+    : isTikTokLocked
+      ? TEXT.tiktokAccount[lang]
     : isInstagramLocked
       ? TEXT.instagramAccount[lang]
       : isFacebookLocked
@@ -1290,6 +1379,8 @@ export default function SocialCommentsClient({
         : TEXT.account[lang]
   const accountPlaceholder = isYouTubeLocked
     ? TEXT.selectYoutubeChannel[lang]
+    : isTikTokLocked
+      ? TEXT.selectTikTokAccount[lang]
     : isInstagramLocked
       ? TEXT.selectInstagramAccount[lang]
       : isFacebookLocked
@@ -1297,6 +1388,8 @@ export default function SocialCommentsClient({
         : TEXT.allAccounts[lang]
   const contentLabel = isYouTubeLocked
     ? TEXT.youtubeContent[lang]
+    : isTikTokLocked
+      ? TEXT.tiktokContent[lang]
     : isInstagramLocked
       ? TEXT.instagramContent[lang]
       : isFacebookLocked
@@ -1304,6 +1397,8 @@ export default function SocialCommentsClient({
         : TEXT.content[lang]
   const contentPlaceholder = isYouTubeLocked
     ? TEXT.selectYoutubeVideo[lang]
+    : isTikTokLocked
+      ? TEXT.selectTikTokVideo[lang]
     : isInstagramLocked
       ? TEXT.selectInstagramContent[lang]
       : isFacebookLocked
@@ -1339,7 +1434,7 @@ export default function SocialCommentsClient({
         {embedded ? (
           <div className="flex flex-col gap-2 border-b border-white/10 pb-4 text-sm text-white/55 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
-              <MessageCircle className="h-4 w-4 text-cyan-300" />
+              <PlatformIcon platform={platformLock || "all"} className="h-4 w-4 text-cyan-300" />
               <span className="font-medium text-white/80">{pageTitle}</span>
               <span className="hidden text-white/35 sm:inline">/</span>
               <span className="hidden sm:inline">{pageSubtitle}</span>
@@ -1353,7 +1448,7 @@ export default function SocialCommentsClient({
           <header className="flex flex-col gap-3 border-b border-white/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-2 flex items-center gap-2 text-sm text-white/55">
-                <MessageCircle className="h-4 w-4" />
+                <PlatformIcon platform={platformLock || "all"} className="h-4 w-4" />
                 <span>{pageTitle}</span>
               </div>
               <h1 className="text-2xl font-semibold tracking-normal text-white">{pageTitle}</h1>
@@ -1563,7 +1658,7 @@ export default function SocialCommentsClient({
                     {selectedDetailContent?.preview_url ? <video controls preload="none" poster={selectedDetailContent.thumbnail_url || undefined} src={selectedDetailContent.preview_url} className="aspect-video w-full bg-black object-contain" /> : selectedDetailContent?.thumbnail_url ? <img src={selectedDetailContent.thumbnail_url} alt="" className="aspect-video w-full bg-black object-contain" /> : <div className="flex aspect-video items-center justify-center bg-black/50 text-sm text-white/30">{selectedComment.platform === "youtube" ? <a href={selectedDetailContent?.url || "https://www.youtube.com"} target="_blank" rel="noreferrer" aria-label={TEXT.openOnYouTube[lang]}><PlatformIcon platform="youtube" className="h-10 w-12" /></a> : <PlatformIcon platform={selectedComment.platform} className="h-8 w-8" />}</div>}
                     <div className="p-3">
                       <div className="text-sm font-medium text-white/80">{selectedDetailContent?.title || selectedComment.external_content_id}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/40"><span>{formatDate(selectedDetailContent?.published_at || null, lang)}</span>{selectedDetailContent?.url ? <a href={selectedDetailContent.url} target="_blank" rel="noreferrer" className="hover:text-white hover:underline">{selectedComment.platform === "youtube" ? TEXT.openOnYouTube[lang] : selectedComment.platform === "facebook" ? TEXT.openOnFacebook[lang] : TEXT.openOnInstagram[lang]}</a> : null}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-white/40"><span>{formatDate(selectedDetailContent?.published_at || null, lang)}</span>{selectedDetailContent?.url ? <a href={selectedDetailContent.url} target="_blank" rel="noreferrer" className="hover:text-white hover:underline">{selectedComment.platform === "youtube" ? TEXT.openOnYouTube[lang] : selectedComment.platform === "tiktok" ? TEXT.openOnTikTok[lang] : selectedComment.platform === "facebook" ? TEXT.openOnFacebook[lang] : TEXT.openOnInstagram[lang]}</a> : null}</div>
                     </div>
                   </article>
 

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports, import/order */
+
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -581,7 +583,7 @@ test('reply route and service retain shared validation, ownership, and idempoten
   const service = fs.readFileSync(path.join(process.cwd(), 'src/lib/social-comments/service.ts'), 'utf8')
 
   assert.match(route, /message\.trim\(\)/)
-  assert.match(route, /message\.length > 2000/)
+  assert.match(route, /Array\.from\(message\)\.length > 2000/)
   assert.match(route, /idempotencyKey\.length < 12 \|\| idempotencyKey\.length > 160/)
   assert.match(route, /\^\[A-Za-z0-9\._:-\]\+\$/)
   assert.match(service, /comment\.direction !== 'inbound'/)
@@ -590,7 +592,7 @@ test('reply route and service retain shared validation, ownership, and idempoten
   assert.match(service, /error\?\.code !== '23505'/)
   assert.match(service, /existing\.status === 'sent' \|\| existing\.status === 'completed'/)
   assert.match(route, /instagramReplyEnabled: isInstagramCommentsReplyEnabled\(\)/)
-  assert.match(service, /isSocialCommentReplyPlatformEnabled\(comment\.platform, options\.instagramReplyEnabled === true\)/)
+  assert.match(service, /isSocialCommentReplyPlatformEnabled\([\s\S]*options\.instagramReplyEnabled === true,[\s\S]*options\.tiktokReplyEnabled === true/)
 
   const ownershipGate = service.indexOf('const ownedContent = await assertCommentReplyTargetOwned')
   const idempotencyGate = service.indexOf('const action = await startReplyActionLog')
@@ -714,6 +716,21 @@ test('reply route returns 403 before Instagram provider access when the server g
       '@/lib/social-comments/persistence-policy': {
         resolveSocialCommentPersistence: () => { throw new Error('unexpected persistence') },
       },
+      '@/lib/tiktok/business-token-manager': {
+        TikTokBusinessTokenAccessError: class TikTokBusinessTokenAccessError extends Error {},
+        getTikTokBusinessCommentToken: async () => { throw new Error('unexpected TikTok token lookup') },
+      },
+      '@/lib/tiktok/business-comment-limits': {
+        getTikTokCommentReadLimits: () => ({
+          perEndpointRequestsPerMinute: 20,
+          topLevelRequestBudget: 5,
+          replyRequestBudget: 15,
+        }),
+      },
+      '@/lib/tiktok/comment-text': {
+        countUnicodeCodePoints: (value) => Array.from(value).length,
+        isTikTokCommentReplyWithinLimit: (value) => Array.from(value).length <= 1200,
+      },
     }
   )
 
@@ -741,6 +758,7 @@ test('reply route returns 403 before Instagram provider access when the server g
       '@/lib/social-comments/feature-flag': {
         getEnabledSocialCommentPlatforms: () => ['instagram'],
         isInstagramCommentsReplyEnabled: () => false,
+        isTikTokCommentsReplyEnabled: () => false,
         isSocialCommentsApiEnabled: () => true,
       },
       '@/lib/social-comments/i18n': {

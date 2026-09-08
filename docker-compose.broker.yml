@@ -11,9 +11,12 @@
 # transport 细节（公网地址/端口）全走 env（broker.env），不写死。
 #
 # 部署（美国机，/opt/stargaze-broker，feature 分支 + broker.env 已就位）：
-#   docker compose -p stargaze-broker -f docker-compose.broker.yml up -d --build
+#   # shell exports override only the ${BROKER_*} network interpolation fields; broker credentials stay file-backed.
+#   node scripts/tiktok-production-readiness.cjs --role=broker --env=broker.env
+#   docker compose --env-file broker.env -p stargaze-broker -f docker-compose.broker.yml config
+#   docker compose --env-file broker.env -p stargaze-broker -f docker-compose.broker.yml up -d --build
 # 回滚：
-#   docker compose -p stargaze-broker -f docker-compose.broker.yml down
+#   docker compose --env-file broker.env -p stargaze-broker -f docker-compose.broker.yml down
 # 校验未碰现有容器：
 #   docker ps   # newapi / newapi_bjx_overlay / okspeak-intl / nginx-proxy-manager / stargaze-worker 应全未变动
 #

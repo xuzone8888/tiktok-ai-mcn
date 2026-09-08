@@ -27,7 +27,7 @@ test('Instagram management page gates and embeds comments with the existing flag
 
   assert.match(route, /isInstagramCommentsPageEnabled\(\) && getInstagramAuthMode\(\) === 'instagram'/)
   assert.match(route, /instagramReplyEnabled=\{showCommentManagement && isInstagramCommentsReplyEnabled\(\)\}/)
-  assert.match(publishPage, /label: isEnglish \? 'Video Publishing' : '视频发布'/)
+  assert.match(publishPage, /label: isEnglish \? 'Create Post' : '创建发布'/)
   assert.match(publishPage, /label: isEnglish \? 'Video List' : '视频列表'/)
   assert.match(publishPage, /label: isEnglish \? 'Comment Management' : '评论管理'/)
   assert.match(publishPage, /platformLock=\{config\.platform\}/)

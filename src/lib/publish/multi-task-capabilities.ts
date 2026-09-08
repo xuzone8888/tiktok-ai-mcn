@@ -4,9 +4,6 @@ import {
     type MultiTaskPrivacyLevel,
 } from '@/lib/publish/multi-task-policy'
 import { getCreatorInfo, type CreatorInfo } from '@/lib/tiktok/content-posting'
-import { calculateTokenExpiration, refreshAccessToken } from '@/lib/tiktok/oauth'
-import { isTikTokAccessTokenFresh } from '@/lib/tiktok/token-manager'
-import type { TikTokRefreshTokenResponse } from '@/lib/tiktok/types'
 
 const CREATOR_INFO_CONCURRENCY = 3
 
@@ -17,9 +14,6 @@ export interface MultiTaskCapabilityAccountInput {
     avatar_url: string | null
     status: string
     token_expires_at: string | null
-    access_token_expires_at?: string | null
-    access_token: string
-    refresh_token: string
 }
 
 export interface MultiTaskAccountCapability {
@@ -67,7 +61,7 @@ export interface MultiTaskCapabilityVideo {
 }
 
 interface ResolveOptions {
-    onTokenRefresh?: (accountId: string, token: TikTokRefreshTokenResponse) => Promise<void>
+    getAccessToken: (accountId: string) => Promise<string>
 }
 
 function isAuthorized(account: MultiTaskCapabilityAccountInput) {
@@ -188,7 +182,7 @@ async function mapWithConcurrency<T, R>(
 
 export async function resolveMultiTaskCapabilities(
     accounts: MultiTaskCapabilityAccountInput[],
-    options: ResolveOptions = {}
+    options: ResolveOptions
 ): Promise<MultiTaskCapabilityResult> {
     const resolvedAccounts = await mapWithConcurrency(accounts, CREATOR_INFO_CONCURRENCY, async (account) => {
         if (!isAuthorized(account)) {
@@ -196,14 +190,7 @@ export async function resolveMultiTaskCapabilities(
         }
 
         try {
-            let accessToken = account.access_token
-            if (account.refresh_token && !isTikTokAccessTokenFresh(account.access_token_expires_at)) {
-                const refreshed = await refreshAccessToken(account.refresh_token)
-                accessToken = refreshed.access_token
-                account.access_token_expires_at = calculateTokenExpiration(refreshed.expires_in).toISOString()
-                await options.onTokenRefresh?.(account.id, refreshed)
-            }
-
+            const accessToken = await options.getAccessToken(account.id)
             const creatorInfo = await getCreatorInfo(accessToken)
             const capability = toCapability(account, creatorInfo)
             if (capability.privacy_level_options.length === 0) {

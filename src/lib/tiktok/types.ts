@@ -110,7 +110,7 @@ export interface TikTokPublishStatusResponse {
     data: {
         status: 'PROCESSING_DOWNLOAD' | 'PROCESSING_UPLOAD' | 'SEND_TO_USER_INBOX' | 'PUBLISH_COMPLETE' | 'FAILED';
         fail_reason?: string;
-        publicaly_available_post_id?: string[];
+        publicaly_available_post_id?: Array<string | number>;
         uploaded_bytes?: number;
     };
     error: {

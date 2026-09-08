@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCreatorInfo, type CreatorInfo } from '@/lib/tiktok/content-posting'
 import { getValidTikTokAccessToken } from '@/lib/tiktok/token-manager'
@@ -39,9 +40,10 @@ export async function GET(request: NextRequest) {
         // 查询账号信息（验证归属并获取 token）
         const { data: account, error: accountError } = await supabase
             .from('tiktok_accounts')
-            .select('id, access_token, refresh_token, access_token_expires_at, display_name, avatar_url, creator_info_cache, creator_info_cached_at')
+            .select('id, display_name, avatar_url, creator_info_cache, creator_info_cached_at')
             .eq('id', accountId)
             .eq('user_id', user.id)
+            .eq('account_type', 'normal')
             .single()
 
         if (accountError || !account) {
@@ -60,9 +62,9 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        let accessToken = account.access_token
+        let accessToken: string
         try {
-            accessToken = await getValidTikTokAccessToken(supabase, account)
+            accessToken = await getValidTikTokAccessToken(createAdminClient(), account.id)
         } catch (refreshError) {
             console.error('[CreatorInfo] Token refresh failed:', refreshError)
             return NextResponse.json({ error: '账号授权已过期，请重新授权', error_type: 'auth_expired' }, { status: 401 })
@@ -77,6 +79,8 @@ export async function GET(request: NextRequest) {
                 creator_info_cached_at: new Date().toISOString(),
             })
             .eq('id', accountId)
+            .eq('user_id', user.id)
+            .eq('account_type', 'normal')
 
         return NextResponse.json({
             success: true,

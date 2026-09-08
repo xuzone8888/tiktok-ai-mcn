@@ -1441,7 +1441,7 @@ export default function YouTubePublishClient({ showCommentManagement, enableYouT
 
         <div className="flex w-fit gap-1 rounded-xl border border-white/10 bg-black/40 p-1.5 backdrop-blur-md">
           {[
-            { id: "create" as TabType, label: isEnglish ? "Video Publishing" : "视频发布", icon: Send },
+            { id: "create" as TabType, label: isEnglish ? "Create Post" : "创建发布", icon: Send },
             { id: "tasks" as TabType, label: isEnglish ? "Video List" : "视频列表", icon: ListFilter },
             ...(showCommentManagement
               ? [{ id: "comments" as TabType, label: isEnglish ? "Comment Management" : "评论管理", icon: MessageCircle }]

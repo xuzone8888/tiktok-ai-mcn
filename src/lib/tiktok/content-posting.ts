@@ -1,11 +1,11 @@
 // TikTok Content Posting API Implementation
 
+import { isTrustedTikTokUploadUrl } from './file-upload-contract';
+import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
 import {
     TikTokPublishVideoRequest,
-    TikTokVideoUploadInitResponse,
     TikTokPublishStatusResponse
 } from './types';
-import { isTikTokMockCredential, isTikTokTestMockEnabled } from './test-mock';
 
 // TikTok Content Posting API endpoints
 const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/video/init/';
@@ -13,6 +13,322 @@ const TIKTOK_PUBLISH_VIDEO_INIT = 'https://open.tiktokapis.com/v2/post/publish/v
 const TIKTOK_PUBLISH_CONTENT_INIT = 'https://open.tiktokapis.com/v2/post/publish/content/init/';
 const TIKTOK_PUBLISH_STATUS = 'https://open.tiktokapis.com/v2/post/publish/status/fetch/';
 const TIKTOK_CREATOR_INFO = 'https://open.tiktokapis.com/v2/post/publish/creator_info/query/';
+const TIKTOK_REQUEST_TIMEOUT_MS = 20_000;
+
+export type TikTokPublishingOperation =
+    | 'creator_info'
+    | 'video_init'
+    | 'photo_init'
+    | 'status_fetch';
+
+export type TikTokPublishingOutcome = 'rejected' | 'unknown';
+
+const TIKTOK_PUBLISH_STATUSES = new Set([
+    'PROCESSING_DOWNLOAD',
+    'PROCESSING_UPLOAD',
+    'SEND_TO_USER_INBOX',
+    'PUBLISH_COMPLETE',
+    'FAILED',
+] as const);
+
+type TikTokPublishStatus = TikTokPublishStatusResponse['data']['status'];
+
+export type TikTokVideoMimeType = 'video/mp4' | 'video/quicktime' | 'video/webm';
+
+export interface TikTokVideoPostInfo {
+    title: string;
+    privacyLevel: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY';
+    disableDuet?: boolean;
+    disableComment?: boolean;
+    disableStitch?: boolean;
+    brandContentToggle?: boolean;
+    brandOrganicToggle?: boolean;
+    isAigc?: boolean;
+    videoCoverTimestampMs?: number;
+}
+
+export interface TikTokFileUploadPlan {
+    videoSize: number;
+    chunkSize: number;
+    totalChunkCount: number;
+}
+
+export interface TikTokFileUploadInitResult extends TikTokFileUploadPlan {
+    publishId: string;
+    uploadUrl: string;
+}
+
+const TIKTOK_MAX_VIDEO_SIZE_BYTES = 4 * 1024 * 1024 * 1024;
+const TIKTOK_FILE_CHUNK_SIZE_BYTES = 10 * 1024 * 1024;
+const TIKTOK_MAX_SINGLE_CHUNK_BYTES = 64 * 1024 * 1024;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getSuccessfulResponseData(payload: unknown): Record<string, unknown> | null {
+    if (!isRecord(payload) || !isRecord(payload.error) || payload.error.code !== 'ok') {
+        return null;
+    }
+    return isRecord(payload.data) ? payload.data : null;
+}
+
+function getResponseProviderCode(payload: unknown): string | null {
+    if (!isRecord(payload) || !isRecord(payload.error)) return null;
+    if (typeof payload.error.code !== 'string') return null;
+    const normalized = normalizeProviderCode(payload.error.code);
+    return normalized === 'unknown_error' ? null : normalized;
+}
+
+function isPublishStatus(value: unknown): value is TikTokPublishStatus {
+    return typeof value === 'string'
+        && TIKTOK_PUBLISH_STATUSES.has(value as TikTokPublishStatus);
+}
+
+export function buildTikTokFileUploadPlan(videoSize: number): TikTokFileUploadPlan {
+    if (
+        !Number.isSafeInteger(videoSize)
+        || videoSize <= 0
+        || videoSize > TIKTOK_MAX_VIDEO_SIZE_BYTES
+    ) {
+        throw new TypeError('TikTok video size is invalid');
+    }
+
+    if (videoSize <= TIKTOK_MAX_SINGLE_CHUNK_BYTES) {
+        return { videoSize, chunkSize: videoSize, totalChunkCount: 1 };
+    }
+
+    const totalChunkCount = Math.floor(videoSize / TIKTOK_FILE_CHUNK_SIZE_BYTES);
+    if (totalChunkCount < 1 || totalChunkCount > 1000) {
+        throw new TypeError('TikTok video chunk count is invalid');
+    }
+
+    return {
+        videoSize,
+        chunkSize: TIKTOK_FILE_CHUNK_SIZE_BYTES,
+        totalChunkCount,
+    };
+}
+
+function buildVideoPostInfo(postInfo: TikTokVideoPostInfo) {
+    return {
+        title: postInfo.title,
+        privacy_level: postInfo.privacyLevel,
+        disable_duet: postInfo.disableDuet ?? false,
+        disable_comment: postInfo.disableComment ?? false,
+        disable_stitch: postInfo.disableStitch ?? false,
+        brand_content_toggle: postInfo.brandContentToggle ?? false,
+        brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
+        is_aigc: postInfo.isAigc ?? false,
+        video_cover_timestamp_ms: postInfo.videoCoverTimestampMs ?? 0,
+    };
+}
+
+function parsePublishId(data: Record<string, unknown>, responseStatus: number): string {
+    const publishId = typeof data.publish_id === 'string' ? data.publish_id.trim() : '';
+    if (!publishId || publishId.length > 64) {
+        logInvalidSuccessfulResponse('video_init', responseStatus, 'invalid_publish_id');
+        throw new TikTokPublishingError({
+            operation: 'video_init',
+            providerCode: 'invalid_response',
+            httpStatus: responseStatus,
+            outcome: 'unknown',
+            message: safePublishingMessage('video_init', 'invalid_response', 'unknown'),
+        });
+    }
+    return publishId;
+}
+
+function parseTikTokUploadUrl(data: Record<string, unknown>, responseStatus: number): string {
+    const uploadUrl = typeof data.upload_url === 'string' ? data.upload_url.trim() : '';
+    if (!isTrustedTikTokUploadUrl(uploadUrl)) {
+        logInvalidSuccessfulResponse(
+            'video_init',
+            responseStatus,
+            'invalid_upload_url',
+            describeUploadUrlForSafeLogging(uploadUrl)
+        );
+        throw new TikTokPublishingError({
+            operation: 'video_init',
+            providerCode: 'invalid_response',
+            httpStatus: responseStatus,
+            outcome: 'unknown',
+            message: safePublishingMessage('video_init', 'invalid_response', 'unknown'),
+        });
+    }
+
+    return uploadUrl;
+}
+
+interface TikTokPublishingErrorOptions {
+    operation: TikTokPublishingOperation;
+    providerCode: string;
+    httpStatus: number | null;
+    outcome: TikTokPublishingOutcome;
+    message: string;
+}
+
+export class TikTokPublishingError extends Error {
+    readonly operation: TikTokPublishingOperation;
+    readonly providerCode: string;
+    readonly httpStatus: number | null;
+    readonly outcome: TikTokPublishingOutcome;
+
+    constructor(options: TikTokPublishingErrorOptions) {
+        super(options.message);
+        this.name = 'TikTokPublishingError';
+        this.operation = options.operation;
+        this.providerCode = options.providerCode;
+        this.httpStatus = options.httpStatus;
+        this.outcome = options.outcome;
+    }
+}
+
+export function isTikTokPublishingError(error: unknown): error is TikTokPublishingError {
+    return error instanceof TikTokPublishingError;
+}
+
+function normalizeProviderCode(value: unknown): string {
+    if (typeof value !== 'string') return 'unknown_error';
+    const normalized = value.trim();
+    return /^[A-Za-z0-9_.-]{1,128}$/.test(normalized) ? normalized : 'unknown_error';
+}
+
+function isAmbiguousWriteStatus(status: number): boolean {
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function safePublishingMessage(
+    operation: TikTokPublishingOperation,
+    providerCode: string,
+    outcome: TikTokPublishingOutcome
+): string {
+    if (providerCode === 'unaudited_client_can_only_post_to_private_accounts') {
+        return 'TikTok 未审核应用只能向私密账号发布仅自己可见的内容';
+    }
+    if (outcome === 'unknown' && (operation === 'video_init' || operation === 'photo_init')) {
+        return '无法确认 TikTok 是否接收了发布请求，请先检查账号后再处理';
+    }
+    if (operation === 'creator_info') return 'TikTok 创作者信息暂时不可用';
+    if (operation === 'status_fetch') return 'TikTok 发布状态暂时无法确认';
+    return 'TikTok 拒绝了发布请求';
+}
+
+function logInvalidSuccessfulResponse(
+    operation: TikTokPublishingOperation,
+    httpStatus: number,
+    reason: 'missing_success_data' | 'invalid_publish_id' | 'invalid_upload_url',
+    details: Record<string, string | number | boolean> = {}
+): void {
+    // Never log the provider body, publish_id, or upload_url. The reason is
+    // deliberately structural so a live failure can be diagnosed without
+    // exposing credentials embedded in the upload URL.
+    console.warn('[TikTok Publishing] Invalid successful response', {
+        operation,
+        httpStatus,
+        reason,
+        ...details,
+    });
+}
+
+function describeUploadUrlForSafeLogging(uploadUrl: string): Record<string, string | number | boolean> {
+    const base = {
+        uploadUrlPresent: Boolean(uploadUrl),
+        uploadUrlLength: uploadUrl.length,
+    };
+
+    try {
+        const parsed = new URL(uploadUrl);
+        // The hostname is safe to retain for trust-boundary diagnosis. Never
+        // retain the path, query, fragment, or the raw URL: TikTok embeds the
+        // upload credential in the query string.
+        const hostname = parsed.hostname.toLowerCase();
+        return {
+            ...base,
+            uploadUrlParseable: true,
+            uploadUrlHttps: parsed.protocol === 'https:',
+            uploadUrlHost: hostname,
+            uploadUrlPort: parsed.port || 'default',
+            uploadUrlHasCredentials: Boolean(parsed.username || parsed.password),
+            uploadUrlHasQuery: Boolean(parsed.search),
+            uploadUrlHasFragment: Boolean(parsed.hash),
+        };
+    } catch {
+        return {
+            ...base,
+            uploadUrlParseable: false,
+        };
+    }
+}
+
+async function readProviderCode(response: Response): Promise<string> {
+    const body = await response.text().catch(() => '');
+    if (!body) return `http_${response.status}`;
+    try {
+        const payload = JSON.parse(body) as {
+            error?: { code?: unknown } | unknown;
+            code?: unknown;
+        };
+        const nestedCode = payload.error && typeof payload.error === 'object'
+            ? (payload.error as { code?: unknown }).code
+            : undefined;
+        return normalizeProviderCode(nestedCode ?? payload.code ?? `http_${response.status}`);
+    } catch {
+        return `http_${response.status}`;
+    }
+}
+
+async function throwResponseError(
+    response: Response,
+    operation: TikTokPublishingOperation
+): Promise<never> {
+    const providerCode = await readProviderCode(response);
+    const outcome: TikTokPublishingOutcome = isAmbiguousWriteStatus(response.status)
+        ? 'unknown'
+        : 'rejected';
+    const error = new TikTokPublishingError({
+        operation,
+        providerCode,
+        httpStatus: response.status,
+        outcome,
+        message: safePublishingMessage(operation, providerCode, outcome),
+    });
+    console.warn('[TikTok Publishing] Provider request failed', {
+        operation: error.operation,
+        providerCode: error.providerCode,
+        httpStatus: error.httpStatus,
+        outcome: error.outcome,
+    });
+    throw error;
+}
+
+async function fetchTikTok(
+    url: string,
+    options: RequestInit,
+    operation: TikTokPublishingOperation
+): Promise<Response> {
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: options.signal ?? AbortSignal.timeout(TIKTOK_REQUEST_TIMEOUT_MS),
+        });
+    } catch {
+        const error = new TikTokPublishingError({
+            operation,
+            providerCode: 'transport_error',
+            httpStatus: null,
+            outcome: 'unknown',
+            message: safePublishingMessage(operation, 'transport_error', 'unknown'),
+        });
+        console.warn('[TikTok Publishing] Provider request did not return a response', {
+            operation: error.operation,
+            providerCode: error.providerCode,
+            httpStatus: error.httpStatus,
+            outcome: error.outcome,
+        });
+        throw error;
+    }
+}
 
 export interface CreatorInfo {
     creator_avatar_url: string;
@@ -59,142 +375,196 @@ export async function getCreatorInfo(accessToken: string): Promise<CreatorInfo> 
         return getMockCreatorInfo(accessToken)
     }
 
-    const response = await fetch(TIKTOK_CREATOR_INFO, {
+    const response = await fetchTikTok(TIKTOK_CREATOR_INFO, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({}),
-    });
+    }, 'creator_info');
 
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get creator info: ${errorText}`);
+        await throwResponseError(response, 'creator_info');
     }
 
-    const data = await response.json();
+    const payload = await response.json().catch(() => null) as unknown;
+    const data = getSuccessfulResponseData(payload);
+    const providerCode = getResponseProviderCode(payload);
 
-    if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok API error: ${data.error.message}`);
+    if (!data) {
+        const outcome: TikTokPublishingOutcome = providerCode && providerCode !== 'ok'
+            ? 'rejected'
+            : 'unknown';
+        throw new TikTokPublishingError({
+            operation: 'creator_info',
+            providerCode: providerCode && providerCode !== 'ok' ? providerCode : 'invalid_response',
+            httpStatus: response.status,
+            outcome,
+            message: safePublishingMessage('creator_info', providerCode ?? 'invalid_response', outcome),
+        });
     }
 
-    return data.data as CreatorInfo;
-}
-
-// Helper for fetch with retry
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
-    let lastError;
-    for (let i = 0; i < retries; i++) {
-        try {
-            const res = await fetch(url, options);
-            // Only retry on network errors or 5xx server errors
-            if (res.ok || (res.status < 500 && res.status !== 429)) {
-                return res;
-            }
-            // Log warning for error status
-            console.warn(`Fetch attempt ${i + 1} failed with status ${res.status}`);
-        } catch (error) {
-            lastError = error;
-            console.warn(`Fetch attempt ${i + 1} failed with network error:`, error);
-        }
-
-        // Wait before retry (exponential backoff: 1s, 2s, 3s)
-        if (i < retries - 1) {
-            await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-        }
+    const privacyLevels = data.privacy_level_options;
+    const maxDuration = data.max_video_post_duration_sec;
+    if (
+        typeof data.creator_avatar_url !== 'string'
+        || typeof data.creator_username !== 'string'
+        || typeof data.creator_nickname !== 'string'
+        || !Array.isArray(privacyLevels)
+        || !privacyLevels.every((level) => typeof level === 'string')
+        || typeof data.comment_disabled !== 'boolean'
+        || typeof data.duet_disabled !== 'boolean'
+        || typeof data.stitch_disabled !== 'boolean'
+        || typeof maxDuration !== 'number'
+        || !Number.isSafeInteger(maxDuration)
+        || maxDuration <= 0
+    ) {
+        throw new TikTokPublishingError({
+            operation: 'creator_info',
+            providerCode: 'invalid_response',
+            httpStatus: response.status,
+            outcome: 'unknown',
+            message: safePublishingMessage('creator_info', 'invalid_response', 'unknown'),
+        });
     }
-    throw lastError || new Error('Fetch failed after retries');
+
+    return {
+        creator_avatar_url: data.creator_avatar_url,
+        creator_username: data.creator_username,
+        creator_nickname: data.creator_nickname,
+        privacy_level_options: privacyLevels,
+        comment_disabled: data.comment_disabled,
+        duet_disabled: data.duet_disabled,
+        stitch_disabled: data.stitch_disabled,
+        max_video_post_duration_sec: maxDuration,
+    };
 }
 
 // Initialize video publish from URL
 export async function initVideoPublishFromUrl(
     accessToken: string,
     videoUrl: string,
-    postInfo: {
-        title: string;
-        privacyLevel: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY';
-        disableDuet?: boolean;
-        disableComment?: boolean;
-        disableStitch?: boolean;
-        brandContentToggle?: boolean;
-        brandOrganicToggle?: boolean;
-        isAigc?: boolean;
-        videoCoverTimestampMs?: number;
-    }
+    postInfo: TikTokVideoPostInfo
 ): Promise<string> {
     if (shouldUseLocalTikTokMock(accessToken)) {
         const suffix = Math.random().toString(36).slice(2, 10)
-        console.log('[TikTok Publish] Local mock init:', {
-            videoUrl: videoUrl.substring(0, 80) + '...',
-            title: postInfo.title?.substring(0, 50),
-        })
+        console.log('[TikTok Publish] Local mock init')
         return `mock-publish-${Date.now()}-${suffix}`
     }
 
     const requestBody: TikTokPublishVideoRequest = {
-        post_info: {
-            title: postInfo.title,
-            privacy_level: postInfo.privacyLevel,
-            disable_duet: postInfo.disableDuet ?? false,
-            disable_comment: postInfo.disableComment ?? false,
-            disable_stitch: postInfo.disableStitch ?? false,
-            brand_content_toggle: postInfo.brandContentToggle ?? false,
-            brand_organic_toggle: postInfo.brandOrganicToggle ?? false,
-            is_aigc: postInfo.isAigc ?? false,
-            video_cover_timestamp_ms: postInfo.videoCoverTimestampMs ?? 0,
-        },
+        post_info: buildVideoPostInfo(postInfo),
         source_info: {
             source: 'PULL_FROM_URL' as const,
             video_url: videoUrl,
         },
     };
 
-    // 记录请求详情用于调试
     console.log('[TikTok Publish] Initiating publish:', {
-        videoUrl: videoUrl.substring(0, 80) + '...',
-        title: postInfo.title?.substring(0, 50),
         privacyLevel: postInfo.privacyLevel,
         isAigc: postInfo.isAigc,
     })
 
-    const response = await fetchWithRetry(TIKTOK_PUBLISH_VIDEO_INIT, {
+    const response = await fetchTikTok(TIKTOK_PUBLISH_VIDEO_INIT, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json; charset=UTF-8',
         },
         body: JSON.stringify(requestBody),
-    });
+    }, 'video_init');
 
     if (!response.ok) {
-        const errorText = await response.text();
-        // 记录完整错误信息
-        console.error('[TikTok Publish] API Error:', {
-            status: response.status,
-            statusText: response.statusText,
-            errorBody: errorText.substring(0, 500),
-            videoUrl: videoUrl.substring(0, 80),
-        })
-        try {
-            const errorJson = JSON.parse(errorText);
-            const message = errorJson.error?.message || errorJson.message || errorText;
-            throw new Error(`TikTok API Error (${response.status}): ${message}`);
-        } catch (e) {
-            if (e instanceof Error && e.message.startsWith('TikTok API Error')) {
-                throw e
-            }
-            throw new Error(`Failed to init video publish (${response.status}): ${errorText.substring(0, 200)}`);
+        await throwResponseError(response, 'video_init');
+    }
+
+    const payload = await response.json().catch(() => null) as unknown;
+    const data = getSuccessfulResponseData(payload);
+    const providerCode = getResponseProviderCode(payload);
+
+    if (!data) {
+        const outcome: TikTokPublishingOutcome = providerCode && providerCode !== 'ok'
+            ? 'rejected'
+            : 'unknown';
+        if (outcome === 'unknown') {
+            logInvalidSuccessfulResponse('video_init', response.status, 'missing_success_data');
         }
+        throw new TikTokPublishingError({
+            operation: 'video_init',
+            providerCode: providerCode && providerCode !== 'ok' ? providerCode : 'invalid_response',
+            httpStatus: response.status,
+            outcome,
+            message: safePublishingMessage('video_init', providerCode ?? 'invalid_response', outcome),
+        });
     }
 
-    const data: TikTokVideoUploadInitResponse = await response.json();
+    return parsePublishId(data, response.status);
+}
 
-    if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok publish error: ${data.error.message} (${data.error.code})`);
+// Initialize a Direct Post upload for a local file. The upload URL is returned
+// only after the caller has durably persisted publishId behind an attempt fence.
+export async function initVideoPublishFromFile(
+    accessToken: string,
+    videoSize: number,
+    postInfo: TikTokVideoPostInfo
+): Promise<TikTokFileUploadInitResult> {
+    const plan = buildTikTokFileUploadPlan(videoSize);
+
+    if (shouldUseLocalTikTokMock(accessToken)) {
+        const suffix = Math.random().toString(36).slice(2, 10);
+        return {
+            ...plan,
+            publishId: `mock-publish-${Date.now()}-${suffix}`,
+            uploadUrl: 'https://open-upload.tiktokapis.com/video/?upload_id=mock&upload_token=mock',
+        };
     }
 
-    return data.data.publish_id;
+    const response = await fetchTikTok(TIKTOK_PUBLISH_VIDEO_INIT, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: JSON.stringify({
+            post_info: buildVideoPostInfo(postInfo),
+            source_info: {
+                source: 'FILE_UPLOAD',
+                video_size: plan.videoSize,
+                chunk_size: plan.chunkSize,
+                total_chunk_count: plan.totalChunkCount,
+            },
+        }),
+    }, 'video_init');
+
+    if (!response.ok) {
+        await throwResponseError(response, 'video_init');
+    }
+
+    const payload = await response.json().catch(() => null) as unknown;
+    const data = getSuccessfulResponseData(payload);
+    const providerCode = getResponseProviderCode(payload);
+    if (!data) {
+        const outcome: TikTokPublishingOutcome = providerCode && providerCode !== 'ok'
+            ? 'rejected'
+            : 'unknown';
+        if (outcome === 'unknown') {
+            logInvalidSuccessfulResponse('video_init', response.status, 'missing_success_data');
+        }
+        throw new TikTokPublishingError({
+            operation: 'video_init',
+            providerCode: providerCode && providerCode !== 'ok' ? providerCode : 'invalid_response',
+            httpStatus: response.status,
+            outcome,
+            message: safePublishingMessage('video_init', providerCode ?? 'invalid_response', outcome),
+        });
+    }
+
+    return {
+        ...plan,
+        publishId: parsePublishId(data, response.status),
+        uploadUrl: parseTikTokUploadUrl(data, response.status),
+    };
 }
 
 // Initialize photo post publish from URLs (S4.2 图文帖直发)
@@ -225,7 +595,6 @@ export async function initPhotoPublishFromUrl(
         const suffix = Math.random().toString(36).slice(2, 10)
         console.log('[TikTok PhotoPublish] Local mock init:', {
             imageCount: photos.imageUrls.length,
-            title: postInfo.title?.substring(0, 50),
         })
         return `mock-publish-${Date.now()}-${suffix}`
     }
@@ -254,45 +623,51 @@ export async function initPhotoPublishFromUrl(
 
     console.log('[TikTok PhotoPublish] Initiating publish:', {
         imageCount: photos.imageUrls.length,
-        title: postInfo.title?.substring(0, 50),
         privacyLevel: postInfo.privacyLevel,
     })
 
-    const response = await fetchWithRetry(TIKTOK_PUBLISH_CONTENT_INIT, {
+    const response = await fetchTikTok(TIKTOK_PUBLISH_CONTENT_INIT, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json; charset=UTF-8',
         },
         body: JSON.stringify(requestBody),
-    });
+    }, 'photo_init');
 
     if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[TikTok PhotoPublish] API Error:', {
-            status: response.status,
-            statusText: response.statusText,
-            errorBody: errorText.substring(0, 500),
-        })
-        try {
-            const errorJson = JSON.parse(errorText);
-            const message = errorJson.error?.message || errorJson.message || errorText;
-            throw new Error(`TikTok API Error (${response.status}): ${message}`);
-        } catch (e) {
-            if (e instanceof Error && e.message.startsWith('TikTok API Error')) {
-                throw e
-            }
-            throw new Error(`Failed to init photo publish (${response.status}): ${errorText.substring(0, 200)}`);
-        }
+        await throwResponseError(response, 'photo_init');
     }
 
-    const data: TikTokVideoUploadInitResponse = await response.json();
+    const payload = await response.json().catch(() => null) as unknown;
+    const data = getSuccessfulResponseData(payload);
+    const providerCode = getResponseProviderCode(payload);
 
-    if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok publish error: ${data.error.message} (${data.error.code})`);
+    if (!data) {
+        const outcome: TikTokPublishingOutcome = providerCode && providerCode !== 'ok'
+            ? 'rejected'
+            : 'unknown';
+        throw new TikTokPublishingError({
+            operation: 'photo_init',
+            providerCode: providerCode && providerCode !== 'ok' ? providerCode : 'invalid_response',
+            httpStatus: response.status,
+            outcome,
+            message: safePublishingMessage('photo_init', providerCode ?? 'invalid_response', outcome),
+        });
     }
 
-    return data.data.publish_id;
+    const publishId = typeof data.publish_id === 'string' ? data.publish_id.trim() : '';
+    if (!publishId || publishId.length > 64) {
+        throw new TikTokPublishingError({
+            operation: 'photo_init',
+            providerCode: 'invalid_response',
+            httpStatus: response.status,
+            outcome: 'unknown',
+            message: safePublishingMessage('photo_init', 'invalid_response', 'unknown'),
+        });
+    }
+
+    return publishId;
 }
 
 // Check publish status
@@ -329,30 +704,54 @@ export async function checkPublishStatus(
         }
     }
 
-    const response = await fetch(TIKTOK_PUBLISH_STATUS, {
+    const response = await fetchTikTok(TIKTOK_PUBLISH_STATUS, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ publish_id: publishId }),
-    });
+    }, 'status_fetch');
 
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to check publish status: ${errorText}`);
+        await throwResponseError(response, 'status_fetch');
     }
 
-    const data: TikTokPublishStatusResponse = await response.json();
+    const payload = await response.json().catch(() => null) as unknown;
+    const data = getSuccessfulResponseData(payload);
+    const providerCode = getResponseProviderCode(payload);
 
-    if (data.error && data.error.code !== 'ok') {
-        throw new Error(`TikTok status error: ${data.error.message}`);
+    if (!data || !isPublishStatus(data.status)) {
+        const outcome: TikTokPublishingOutcome = providerCode && providerCode !== 'ok'
+            ? 'rejected'
+            : 'unknown';
+        throw new TikTokPublishingError({
+            operation: 'status_fetch',
+            providerCode: providerCode && providerCode !== 'ok' ? providerCode : 'invalid_response',
+            httpStatus: response.status,
+            outcome,
+            message: safePublishingMessage('status_fetch', providerCode ?? 'invalid_response', outcome),
+        });
+    }
+
+    const postIds = data.publicaly_available_post_id;
+    const firstPostId = Array.isArray(postIds)
+        ? postIds.find((postId) => (
+            (typeof postId === 'string' && postId.trim().length > 0)
+            || (typeof postId === 'number' && Number.isSafeInteger(postId) && postId > 0)
+        ))
+        : undefined;
+    let normalizedPostId: string | undefined;
+    if (typeof firstPostId === 'string') {
+        normalizedPostId = firstPostId.trim();
+    } else if (typeof firstPostId === 'number') {
+        normalizedPostId = String(firstPostId);
     }
 
     return {
-        status: data.data.status,
-        failReason: data.data.fail_reason,
-        postId: data.data.publicaly_available_post_id?.[0],
+        status: data.status,
+        failReason: typeof data.fail_reason === 'string' ? data.fail_reason : undefined,
+        postId: normalizedPostId,
     };
 }
 
@@ -366,6 +765,7 @@ export async function waitForPublishComplete(
     success: boolean;
     postId?: string;
     error?: string;
+    timedOut?: boolean;
 }> {
     const startTime = Date.now();
 
@@ -381,7 +781,7 @@ export async function waitForPublishComplete(
                 return { success: true, postId: result.postId };
 
             case 'FAILED':
-                return { success: false, error: result.failReason || 'Unknown error' };
+                return { success: false, error: 'TikTok reported that publishing failed', timedOut: false };
 
             case 'PROCESSING_DOWNLOAD':
             case 'PROCESSING_UPLOAD':
@@ -391,7 +791,11 @@ export async function waitForPublishComplete(
         }
     }
 
-    return { success: false, error: 'Publish timeout - still processing' };
+    return {
+        success: false,
+        error: 'TikTok is still processing the publish request',
+        timedOut: true,
+    };
 }
 
 // Privacy level display names
@@ -444,15 +848,19 @@ export async function deleteVideo(
         });
 
         if (!response.ok) {
-            // Log warning but don't crash flow - API might not exist
-            console.warn('TikTok delete API failed or not supported:', await response.text());
+            const providerCode = await readProviderCode(response);
+            console.warn('[TikTok Publishing] Delete request rejected', {
+                operation: 'delete',
+                providerCode,
+                httpStatus: response.status,
+            });
             return false;
         }
 
         const data = await response.json();
         return data.data?.error_code === 0;
-    } catch (error) {
-        console.warn('Failed to delete TikTok video:', error);
+    } catch {
+        console.warn('[TikTok Publishing] Delete request did not complete');
         return false;
     }
 }

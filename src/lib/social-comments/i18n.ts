@@ -58,8 +58,8 @@ const API_MESSAGES: Record<string, Record<SocialCommentLang, string>> = {
     en: 'The current account cannot reply to this comment.',
   },
   reply_disabled: {
-    zh: 'Instagram 评论回复尚未开放',
-    en: 'Instagram comment replies are not enabled yet.',
+    zh: '该平台的评论回复尚未开放',
+    en: 'Comment replies are not enabled for this platform.',
   },
   missing_idempotency_key: {
     zh: '缺少回复幂等键，请刷新后重试',
@@ -72,6 +72,10 @@ const API_MESSAGES: Record<string, Record<SocialCommentLang, string>> = {
   duplicate_request_running: {
     zh: '相同回复请求正在处理中，请稍后查看结果',
     en: 'The same reply request is already running. Check again shortly.',
+  },
+  reply_outcome_unknown: {
+    zh: '上一条回复的 TikTok 结果尚未确认，请先同步评论后再重试',
+    en: 'The previous TikTok reply outcome is unknown. Sync comments before retrying.',
   },
   duplicate_request_sent: {
     zh: '相同回复请求已经完成',

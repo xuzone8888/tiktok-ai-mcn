@@ -3,7 +3,11 @@ import { isSocialCommentOperationSupported } from '@/lib/social-comments/platfor
 
 export function isSocialCommentReplyPlatformEnabled(
   platform: SocialPlatform,
-  instagramReplyEnabled: boolean
+  instagramReplyEnabled: boolean,
+  tiktokReplyEnabled = false,
 ): boolean {
-  return isSocialCommentOperationSupported(platform, 'reply', { instagramReplyEnabled })
+  return isSocialCommentOperationSupported(platform, 'reply', {
+    instagramReplyEnabled,
+    tiktokReplyEnabled,
+  })
 }

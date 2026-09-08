@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Package,
   Users,
-  UserCheck,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -12,10 +11,8 @@ import {
   Zap,
   Images,
   Camera,
-  Send,
   CreditCard,
   LayoutTemplate,
-  ShoppingBag,
   Instagram,
   Loader2,
   Network,
@@ -27,6 +24,7 @@ import { useEffect, useState } from "react";
 import { FacebookBrandIcon } from "@/components/brand/FacebookBrandIcon";
 import { YouTubeBrandIcon } from "@/components/brand/YouTubeBrandIcon";
 import { Button } from "@/components/ui/button";
+import { TikTokLogo } from "@/components/brand/TikTokLogo";
 import {
   Tooltip,
   TooltipContent,
@@ -36,6 +34,11 @@ import {
 import { useLang } from "@/contexts/LangContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  isSidebarNavItemActive,
+  TIKTOK_ACCOUNTS_PATH,
+  TIKTOK_PUBLISH_PATH,
+} from "@/lib/tiktok/routes";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const SHOW_SUPER_CANVAS =
@@ -180,17 +183,17 @@ function getNavGroups(
       header: t ? "Social Publishing" : "社媒内容发布",
       items: [
         {
-          title: t ? "TikTok Accounts" : "TikTok 账号绑定",
-          href: "/publish/accounts",
-          icon: Users,
-          description: t ? "Connect TikTok accounts" : "绑定 TikTok 发布账号",
+          title: t ? "TikTok Account Management" : "TikTok 账号管理",
+          href: TIKTOK_ACCOUNTS_PATH,
+          icon: TikTokLogo,
+          description: t ? "Manage TikTok accounts" : "管理 TikTok 发布账号",
           beta: true,
         },
         {
-          title: t ? "TikTok Publish" : "TikTok 视频发布",
-          href: "/publish",
-          icon: Send,
-          description: t ? "Publish to TikTok" : "发布视频到 TikTok",
+          title: t ? "TikTok Video Management" : "TikTok 视频管理",
+          href: TIKTOK_PUBLISH_PATH,
+          icon: TikTokLogo,
+          description: t ? "Manage and publish TikTok videos" : "管理并发布 TikTok 视频",
           beta: true,
         },
         {
@@ -244,13 +247,13 @@ function getNavGroups(
         {
           title: t ? "Shop Accounts" : "TikTok Shop 账号绑定",
           href: "/shop-publish/accounts",
-          icon: UserCheck,
+          icon: TikTokLogo,
           description: t ? "Connect TikTok Shop" : "绑定 TikTok Shop 账号",
         },
         {
           title: t ? "Shop Publish" : "TikTok Shop 带货发布",
           href: "/shop-publish",
-          icon: ShoppingBag,
+          icon: TikTokLogo,
           description: t ? "Publish to TikTok Shop" : "发布带货视频到 TikTok Shop",
         },
       ],
@@ -516,7 +519,7 @@ export function Sidebar({
               {/* Group Items */}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const isActive = pathname === item.href;
+                  const isActive = isSidebarNavItemActive(pathname, item.href);
                   return renderNavItem(item, isActive);
                 })}
               </div>

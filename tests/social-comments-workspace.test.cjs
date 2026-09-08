@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports, import/order */
+
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -129,7 +131,9 @@ test('batch replies select replyable comments and send one message sequentially'
   assert.match(client, /const \[selectedReplyIds, setSelectedReplyIds\]/)
   assert.match(client, /const targets = inboxComments\.filter/)
   assert.match(client, /for \(const comment of targets\)/)
-  assert.match(client, /await postReply\(comment, message\)/)
+  assert.match(client, /await postReply\(comment, message, attempt\.idempotencyKey\)/)
+  assert.match(client, /crypto\.subtle\.digest\("SHA-256"/)
+  assert.match(client, /window\.localStorage\.setItem\(storageKey, idempotencyKey\)/)
   assert.match(client, /successfulIds\.add\(comment\.id\)/)
   assert.match(client, /setSelectedReplyIds\(allReplyableSelected \? new Set\(\)/)
 })

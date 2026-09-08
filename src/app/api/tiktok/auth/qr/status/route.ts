@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { saveTikTokAccountFromToken } from '@/lib/tiktok/account-binding';
+import { commitTikTokAccountFromAuthState } from '@/lib/tiktok/account-binding';
+import {
+    claimTikTokAuthState,
+    expireTikTokAuthState,
+    failTikTokAuthState,
+    newTikTokAuthProcessingToken,
+} from '@/lib/tiktok/auth-state';
 import { exchangeCodeForToken } from '@/lib/tiktok/oauth';
 import {
     checkTikTokQrCode,
@@ -48,6 +54,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Missing QR authorization state' }, { status: 400 });
     }
 
+    const adminSupabase = createAdminClient();
+    const processingToken = newTikTokAuthProcessingToken();
+    let claimedUserId: string | null = null;
+
     try {
         const supabase = await createClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -55,7 +65,6 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: '请先登录后再绑定 TikTok 账号' }, { status: 401 });
         }
 
-        const adminSupabase = createAdminClient();
         const { data: authState, error: stateError } = await adminSupabase
             .from('tiktok_auth_states')
             .select('*')
@@ -70,6 +79,18 @@ export async function GET(request: NextRequest) {
 
         if (authState.status === 'completed') {
             return NextResponse.json({ status: 'completed', success: true });
+        }
+
+        if (authState.status === 'processing') {
+            const expired = await expireTikTokAuthState(adminSupabase, {
+                state,
+                flowType: 'qr',
+                userId: user.id,
+            });
+            if (expired) {
+                return NextResponse.json({ status: 'expired' });
+            }
+            return NextResponse.json({ status: 'processing' }, { status: 202 });
         }
 
         if (authState.status === 'failed' || authState.status === 'expired') {
@@ -93,7 +114,8 @@ export async function GET(request: NextRequest) {
                     client_ticket: null,
                     qr_token: null,
                 })
-                .eq('state', state!);
+                .eq('state', state!)
+                .eq('status', 'pending');
 
             return NextResponse.json({ status: 'expired' });
         }
@@ -102,7 +124,8 @@ export async function GET(request: NextRequest) {
         await adminSupabase
             .from('tiktok_auth_states')
             .update({ last_checked_at: new Date().toISOString() })
-            .eq('state', state);
+            .eq('state', state)
+            .eq('status', 'pending');
 
         if (status.status === 'expired') {
             await adminSupabase
@@ -114,29 +137,14 @@ export async function GET(request: NextRequest) {
                     client_ticket: null,
                     qr_token: null,
                 })
-                .eq('state', state!);
+                .eq('state', state!)
+                .eq('status', 'pending');
 
             return NextResponse.json({ status: 'expired' });
         }
 
         if (status.status !== 'confirmed') {
             return NextResponse.json({ status: status.status });
-        }
-
-        if (status.client_ticket !== authState.client_ticket) {
-            await adminSupabase
-                .from('tiktok_auth_states')
-                .update({
-                    status: 'failed',
-                    error_code: 'client_ticket_mismatch',
-                    error_message: 'QR authorization integrity check failed.',
-                    client_ticket: null,
-                    qr_token: null,
-                    completed_at: new Date().toISOString(),
-                })
-                .eq('state', state);
-
-            return NextResponse.json({ error: 'QR authorization integrity check failed' }, { status: 400 });
         }
 
         const code = extractAuthorizationCodeFromQrStatus(status);
@@ -147,18 +155,40 @@ export async function GET(request: NextRequest) {
         const qrRedirectUri = extractRedirectUriFromQrStatus(status);
         const qrDiagnostic = summarizeQrAuthorizationStatus(status);
         console.warn('[TikTok QR] Confirmed authorization payload', qrDiagnostic);
-        const tokenResponse = await exchangeQrCodeForToken(code, qrRedirectUri, qrDiagnostic);
-        const { userInfo } = await saveTikTokAccountFromToken(adminSupabase, user.id, tokenResponse);
 
-        await adminSupabase
-            .from('tiktok_auth_states')
-            .update({
-                status: 'completed',
-                client_ticket: null,
-                qr_token: null,
-                completed_at: new Date().toISOString(),
-            })
-            .eq('state', state);
+        const claimedState = await claimTikTokAuthState(adminSupabase, {
+            state,
+            flowType: 'qr',
+            userId: user.id,
+            processingToken,
+        });
+        if (!claimedState) {
+            return NextResponse.json({ status: 'processing' }, { status: 202 });
+        }
+        claimedUserId = user.id;
+        if (claimedState.client_ticket !== status.client_ticket) {
+            await failTikTokAuthState(adminSupabase, {
+                state,
+                flowType: 'qr',
+                userId: user.id,
+                processingToken,
+                errorCode: 'client_ticket_mismatch',
+                errorMessage: 'QR authorization integrity check failed.',
+            });
+            return NextResponse.json({ error: 'QR authorization integrity check failed' }, { status: 400 });
+        }
+
+        const tokenResponse = await exchangeQrCodeForToken(code, qrRedirectUri, qrDiagnostic);
+        const { userInfo } = await commitTikTokAccountFromAuthState(
+            adminSupabase,
+            {
+                state,
+                flowType: 'qr',
+                userId: user.id,
+                processingToken,
+                tokenResponse,
+            }
+        );
 
         return NextResponse.json({
             status: 'completed',
@@ -168,17 +198,16 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         console.error('TikTok QR status error:', error);
         try {
-            await createAdminClient()
-                .from('tiktok_auth_states')
-                .update({
-                    status: 'failed',
-                    error_code: 'qr_status_failed',
-                    error_message: error instanceof Error ? error.message : 'QR authorization failed',
-                    client_ticket: null,
-                    qr_token: null,
-                    completed_at: new Date().toISOString(),
-                })
-                .eq('state', state);
+            if (claimedUserId) {
+                await failTikTokAuthState(adminSupabase, {
+                    state,
+                    flowType: 'qr',
+                    userId: claimedUserId,
+                    processingToken,
+                    errorCode: 'qr_status_failed',
+                    errorMessage: error instanceof Error ? error.message : 'QR authorization failed',
+                });
+            }
         } catch (updateError) {
             console.warn('Failed to persist TikTok QR status error:', updateError);
         }

@@ -14,7 +14,12 @@ import {
     type MultiTaskAccountInput,
     type MultiTaskVideoInput,
 } from '@/lib/publish/multi-task-scheduler'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import {
+    getTikTokAccountTokens,
+    getValidTikTokAccessToken,
+} from '@/lib/tiktok/token-manager'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,9 +30,6 @@ interface GroupAccountRow {
     avatar_url: string | null
     status: string
     token_expires_at: string | null
-    access_token_expires_at: string | null
-    access_token: string
-    refresh_token: string
 }
 
 function normalizeVideoInputs(value: unknown): MultiTaskVideoInput[] {
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
 
         const { data: accountRows, error: accountsError } = await supabase
             .from('tiktok_accounts')
-            .select('id, display_name, username, avatar_url, status, token_expires_at, access_token_expires_at, access_token, refresh_token')
+            .select('id, display_name, username, avatar_url, status, token_expires_at')
             .eq('user_id', user.id)
             .eq('group_id', groupId)
             .eq('account_type', 'normal')
@@ -139,18 +141,13 @@ export async function POST(request: NextRequest) {
             seed,
         })
 
+        const admin = createAdminClient()
+        const tokenMap = await getTikTokAccountTokens(admin, allAccounts.map((account) => account.id))
         const capabilities = await resolveMultiTaskCapabilities(allAccounts as MultiTaskCapabilityAccountInput[], {
-            onTokenRefresh: async (accountId, token) => {
-                await supabase
-                    .from('tiktok_accounts')
-                    .update({
-                        access_token: token.access_token,
-                        refresh_token: token.refresh_token,
-                        access_token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
-                        token_expires_at: new Date(Date.now() + token.refresh_expires_in * 1000).toISOString(),
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq('id', accountId)
+            getAccessToken: (accountId) => {
+                const token = tokenMap.get(accountId)
+                if (!token) throw new Error('TikTok 账号授权凭证不存在')
+                return getValidTikTokAccessToken(admin, accountId, token)
             },
         })
         const defaults = assertMultiTaskCapabilityPolicy(capabilities, privacyLevel, videos)

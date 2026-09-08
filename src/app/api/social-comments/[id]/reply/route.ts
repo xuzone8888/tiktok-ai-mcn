@@ -5,6 +5,7 @@ import {
   getEnabledSocialCommentPlatforms,
   isInstagramCommentsReplyEnabled,
   isSocialCommentsApiEnabled,
+  isTikTokCommentsReplyEnabled,
 } from '@/lib/social-comments/feature-flag'
 import { getApiMessage, getRequestLang } from '@/lib/social-comments/i18n'
 import { mapSocialCommentError, replyToSocialComment } from '@/lib/social-comments/service'
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!message.trim()) {
       return NextResponse.json({ error: getApiMessage('empty_reply', 'Reply message cannot be empty.', lang), code: 'empty_reply' }, { status: 400 })
     }
-    if (message.length > 2000) {
+    if (Array.from(message).length > 2000) {
       return NextResponse.json({ error: getApiMessage('reply_too_long', 'Reply message cannot exceed 2000 characters.', lang), code: 'reply_too_long' }, { status: 400 })
     }
 
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const reply = await replyToSocialComment(user.id, params.id, message, idempotencyKey, {
       enabledPlatforms: getEnabledSocialCommentPlatforms(),
       instagramReplyEnabled: isInstagramCommentsReplyEnabled(),
+      tiktokReplyEnabled: isTikTokCommentsReplyEnabled(),
     })
 
     return NextResponse.json({ reply })

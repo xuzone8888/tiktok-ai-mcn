@@ -1,10 +1,12 @@
 // Delete (disconnect) a TikTok account
 import { NextRequest, NextResponse } from 'next/server';
 
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid, mapAccountGroupError } from '@/lib/tiktok/account-groups';
 import { deleteDemoAccount, isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import { revokeAccessToken } from '@/lib/tiktok/oauth';
+import { getTikTokAccountToken } from '@/lib/tiktok/token-manager';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,12 +42,13 @@ export async function DELETE(
             );
         }
 
-        // Fetch the account to get access token for revocation
+        // Verify ownership before accessing service-role-only token storage.
         const { data: account, error: fetchError } = await supabase
             .from('tiktok_accounts')
-            .select('access_token')
+            .select('id')
             .eq('id', id)
             .eq('user_id', user.id)
+            .eq('account_type', 'normal')
             .single();
 
         if (fetchError || !account) {
@@ -57,7 +60,8 @@ export async function DELETE(
 
         // Try to revoke the token (don't fail if this fails)
         try {
-            await revokeAccessToken(account.access_token);
+            const token = await getTikTokAccountToken(createAdminClient(), account.id);
+            await revokeAccessToken(token.access_token);
         } catch (revokeError) {
             console.error('Failed to revoke token:', revokeError);
             // Continue with deletion even if revocation fails
@@ -68,7 +72,8 @@ export async function DELETE(
             .from('tiktok_accounts')
             .delete()
             .eq('id', id)
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .eq('account_type', 'normal');
 
         if (deleteError) {
             console.error('Error deleting account:', deleteError);

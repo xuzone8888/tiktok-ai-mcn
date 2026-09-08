@@ -40,6 +40,7 @@ import {
     type ShopPublishSettingsData,
 } from "@/components/shop-publish/ShopPublishSettings";
 import { ShopTaskManager } from "@/components/shop-publish/ShopTaskManager";
+import { TikTokLogo } from "@/components/brand/TikTokLogo";
 import { useLang } from "@/contexts/LangContext";
 import SHOP_TEXT, { localizeError, getPlatformNoticeText, type Lang } from "@/components/shop-publish/shop-publish.i18n";
 
@@ -437,7 +438,7 @@ export default function ShopPublishPage() {
                     <div className="w-1 h-10 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899] opacity-80" />
                     <div>
                     <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                        <ShoppingBag className="h-5 w-5" />
+                        <TikTokLogo className="h-5 w-5 text-white" />
                         {SHOP_TEXT.page.title[lang]}
                     </h1>
                     <p className="text-white/50 text-xs mt-1">

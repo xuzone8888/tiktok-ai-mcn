@@ -13,7 +13,6 @@ import {
     Zap,
     Video,
     Image as ImageIcon,
-    Share2,
     CreditCard,
     Users,
     Shield,
@@ -28,6 +27,7 @@ import {
     FileText,
 } from "lucide-react";
 import { getRoleDisplayName, type UserRole } from "@/lib/admin";
+import { TikTokLogo } from "@/components/brand/TikTokLogo";
 
 // ============================================================================
 // 类型定义
@@ -124,7 +124,7 @@ type TabKey = "overview" | "generations" | "tiktok" | "publish" | "credits";
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: "overview", label: "概览", icon: User },
     { key: "generations", label: "生成任务", icon: Video },
-    { key: "tiktok", label: "TikTok账号", icon: Share2 },
+    { key: "tiktok", label: "TikTok账号", icon: TikTokLogo },
     { key: "publish", label: "发布任务", icon: FileText },
     { key: "credits", label: "积分流水", icon: CreditCard },
 ];
@@ -392,7 +392,7 @@ export default function AdminUserDetailPage() {
                         color="cyan"
                     />
                     <StatCard
-                        icon={Share2}
+                        icon={TikTokLogo}
                         label="TikTok账号"
                         value={stats.tiktokAccounts}
                         subValue="已绑定"
@@ -613,7 +613,7 @@ function TiktokTab({
     if (accounts.length === 0) {
         return (
             <div className="flex h-40 flex-col items-center justify-center text-white/40">
-                <Share2 className="h-8 w-8 mb-2" />
+                <TikTokLogo className="mb-2 h-8 w-8 text-white/50" />
                 <p>暂无绑定的 TikTok 账号</p>
             </div>
         );

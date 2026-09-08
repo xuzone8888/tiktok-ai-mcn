@@ -13,6 +13,7 @@ import {
   Globe,
   Layers3,
   Loader2,
+  MessageCircle,
   PencilLine,
   Plus,
   RefreshCw,
@@ -20,11 +21,11 @@ import {
   Smartphone,
   Sparkles,
   Trash2,
-  UserPlus,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { TikTokLogo } from "@/components/brand/TikTokLogo";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,7 +55,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { isTikTokCommentsPageEnabled } from "@/lib/social-comments/feature-flag";
 import { GROUP_NAME_MAX_LENGTH, MAX_ACCOUNTS_PER_GROUP } from "@/lib/tiktok/account-groups";
+import {
+  canDisconnectTikTokCommentAuthorization,
+  hasTikTokCommentAuthorization,
+} from "@/lib/tiktok/comment-authorization-ui";
+import { shouldPromptTikTokVideoListReauthorization } from "@/lib/tiktok/video-list-rollout";
 import { cn } from "@/lib/utils";
 
 interface TikTokAccount {
@@ -75,6 +82,10 @@ interface TikTokAccount {
   updated_at: string;
   group_id: string | null;
   group_name: string | null;
+  comment_authorization_status: "active" | "not_connected" | "expired" | "incomplete" | "disconnecting";
+  comment_scopes: string[];
+  comment_access_token_expires_at: string | null;
+  comment_refresh_token_expires_at: string | null;
 }
 
 interface AccountGroup {
@@ -198,6 +209,17 @@ function isAccountStableAuthorized(account: TikTokAccount) {
 
 function requiresReauthorization(account: TikTokAccount) {
   return !isAccountAuthorized(account);
+}
+
+function requiresVideoListReauthorization(account: TikTokAccount) {
+  return shouldPromptTikTokVideoListReauthorization(account.scopes);
+}
+
+function getCommentAuthorizationLabel(account: TikTokAccount) {
+  if (account.comment_authorization_status === "active") return "已授权";
+  if (account.comment_authorization_status === "not_connected") return "未授权";
+  if (account.comment_authorization_status === "disconnecting") return "撤销处理中";
+  return "需重新授权";
 }
 
 function canJoinGroup(account: TikTokAccount) {
@@ -640,12 +662,15 @@ function ExpiringAccountNotice({ count }: { count: number }) {
 }
 
 export default function TikTokAccountsPage() {
+  const commentsEnabled = isTikTokCommentsPageEnabled();
   const [accounts, setAccounts] = useState<TikTokAccount[]>([]);
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [qrBinding, setQrBinding] = useState<QrBindingState | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [commentConnectingId, setCommentConnectingId] = useState<string | null>(null);
+  const [commentDisconnectingId, setCommentDisconnectingId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("followers_desc");
   const [filterBy, setFilterBy] = useState<FilterOption>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("accounts");
@@ -722,13 +747,15 @@ export default function TikTokAccountsPage() {
     const error = params.get("error");
     const name = params.get("name");
     const demo = params.get("demo");
+    const businessSuccess = params.get("business_success");
+    const businessError = params.get("business_error");
 
     if (demo) {
       toast({
         title: "本地预览模式",
         description: "当前已内置测试账号，真实 TikTok OAuth 绑定需在测试或生产环境验证。",
       });
-      window.history.replaceState({}, "", "/publish/accounts");
+      window.history.replaceState({}, "", window.location.pathname);
     }
 
     if (success && name) {
@@ -736,16 +763,33 @@ export default function TikTokAccountsPage() {
         title: "账号绑定成功",
         description: `已成功绑定 TikTok 账号: ${name}`,
       });
-      window.history.replaceState({}, "", "/publish/accounts");
+      window.history.replaceState({}, "", window.location.pathname);
     }
 
     if (error) {
       toast({
         variant: "destructive",
         title: "绑定失败",
-        description: decodeURIComponent(error),
+        description: error,
       });
-      window.history.replaceState({}, "", "/publish/accounts");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (businessSuccess) {
+      toast({
+        title: "评论授权成功",
+        description: "TikTok 发布授权保持不变，评论读取和回复权限已单独开启。",
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (businessError) {
+      toast({
+        variant: "destructive",
+        title: "评论授权失败",
+        description: businessError,
+      });
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, [toast]);
 
@@ -832,12 +876,20 @@ export default function TikTokAccountsPage() {
       }
     };
 
-    const timer = window.setInterval(poll, qrBinding.pollIntervalMs || 3000);
-    void poll();
+    let timer: number | null = null;
+    const pollSerially = async () => {
+      await poll();
+      if (!cancelled) {
+        timer = window.setTimeout(pollSerially, qrBinding.pollIntervalMs || 3000);
+      }
+    };
+    void pollSerially();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
     };
   }, [qrBinding, refreshData, toast]);
 
@@ -1130,6 +1182,77 @@ export default function TikTokAccountsPage() {
       });
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const handleCommentConnect = async (accountId: string) => {
+    setCommentConnectingId(accountId);
+    try {
+      const response = await fetch("/api/tiktok/business-auth/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId }),
+      });
+      if (!response.ok) {
+        throw new Error(await readBindingApiError(response, "无法生成 TikTok 评论授权链接"));
+      }
+      const data = await response.json();
+      if (!data.authUrl) {
+        throw new Error("TikTok 评论授权链接缺失");
+      }
+      window.location.href = data.authUrl;
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "评论授权失败",
+        description: error instanceof Error ? error.message : "请稍后重试",
+      });
+      setCommentConnectingId(null);
+    }
+  };
+
+  const handleCommentDisconnect = async (accountId: string) => {
+    if (!window.confirm("仅断开该账号的 TikTok 评论授权？发布授权和发布任务不会被删除。")) {
+      return;
+    }
+
+    setCommentDisconnectingId(accountId);
+    try {
+      const disconnect = (confirmUnknown = false) => fetch("/api/tiktok/business-auth/disconnect", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountId, confirmUnknown }),
+        });
+      let response = await disconnect();
+      if (response.status === 409) {
+        const payload = await response.clone().json().catch(() => null);
+        if (payload?.code === "revocation_confirmation_required") {
+          const confirmed = window.confirm(
+            "TikTok 的远端撤销结果无法自动确认。请先在 TikTok 的授权设置中确认 Star Gaze 已被撤销；确认后点击“确定”，仅完成本地断开。"
+          );
+          if (!confirmed) {
+            throw new Error("评论授权保持停用，等待您确认 TikTok 端的撤销状态。");
+          }
+          response = await disconnect(true);
+        }
+      }
+      if (!response.ok) {
+        throw new Error(await readBindingApiError(response, "无法断开 TikTok 评论授权"));
+      }
+      toast({
+        title: "评论授权已断开",
+        description: "发布授权和既有发布任务保持不变。",
+      });
+      await refreshData({ silent: true });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "评论授权断开未完成",
+        description: error instanceof Error ? error.message : "请稍后重试",
+      });
+      await refreshData({ silent: true });
+    } finally {
+      setCommentDisconnectingId(null);
     }
   };
 
@@ -1563,6 +1686,7 @@ export default function TikTokAccountsPage() {
         .filter((account) => !newGroupAccountIds.includes(account.id))
         .map((account) => account.id)
     : [];
+  const videoListReauthorizationCount = accounts.filter(requiresVideoListReauthorization).length;
   const availableSelectionFull = selectedGroup
     ? selectedGroup.accounts_count + selectedAddAccountIds.length >= MAX_ACCOUNTS_PER_GROUP
     : false;
@@ -1584,9 +1708,9 @@ export default function TikTokAccountsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
-          <div className="h-14 w-1.5 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899]" />
+          <TikTokLogo className="h-9 w-9 shrink-0 text-white" />
           <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-white">TikTok 账号绑定</h1>
+            <h1 className="flex items-center gap-2 text-2xl font-bold text-white">TikTok 账号管理</h1>
             <p className="mt-0.5 text-sm text-white/50">绑定和管理您的 TikTok 账号，用于发布视频内容</p>
           </div>
         </div>
@@ -1606,6 +1730,29 @@ export default function TikTokAccountsPage() {
           <span className="relative z-10">绑定 TikTok 账号</span>
         </button>
       </div>
+
+      {!loading && videoListReauthorizationCount > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.08] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+            <div>
+              <p className="text-sm font-semibold text-amber-100">
+                {videoListReauthorizationCount} 个已有账号需要重新授权
+              </p>
+              <p className="mt-0.5 text-xs text-amber-100/60">
+                新增的视频列表与统计功能需要 video.list 权限，重新绑定不会替换 TikTok Shop 授权。
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBindingModal(true)}
+            className="shrink-0 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-300/15"
+          >
+            重新授权
+          </button>
+        </div>
+      )}
 
       {!loading && accounts.length > 0 && (
         <div className="flex flex-col gap-3 border-y border-white/[0.06] py-4 lg:flex-row lg:items-center">
@@ -1763,7 +1910,7 @@ export default function TikTokAccountsPage() {
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
           <div className="flex flex-col items-center justify-center py-16">
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/20 to-[#EC4899]/20">
-              <UserPlus className="h-10 w-10 text-[#EC4899]" />
+              <TikTokLogo className="h-10 w-10 text-white" />
             </div>
             <h3 className="mb-2 text-xl font-bold text-white">还没有绑定 TikTok 账号</h3>
             <p className="max-w-md text-center text-sm text-white/50">绑定您的 TikTok 账号后，可以直接从平台发布 AI 生成的视频内容</p>
@@ -1782,7 +1929,7 @@ export default function TikTokAccountsPage() {
               {filteredAccounts.map((account) => (
                 <div
                   key={account.id}
-                  className="group relative flex h-[168px] flex-col overflow-hidden rounded-lg border border-white/[0.075] bg-white/[0.035] p-5 transition-all duration-300 hover:border-[#00F2EA]/25 hover:bg-white/[0.055]"
+                  className="group relative flex min-h-[218px] flex-col overflow-hidden rounded-lg border border-white/[0.075] bg-white/[0.035] p-5 transition-all duration-300 hover:border-[#00F2EA]/25 hover:bg-white/[0.055]"
                   style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 34px rgba(0,0,0,0.16)" }}
                 >
                   <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#00F2EA]/35 to-transparent opacity-70" />
@@ -1835,8 +1982,54 @@ export default function TikTokAccountsPage() {
                       <div className="mt-2">
                         <StatusBadge account={account} />
                       </div>
+                      {requiresVideoListReauthorization(account) && (
+                        <div className="mt-1.5 text-[11px] font-medium text-amber-300/80">
+                          缺少 video.list
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+                    <div className={cn(
+                      "rounded-md border px-2.5 py-2",
+                      isAccountAuthorized(account)
+                        ? "border-emerald-400/15 bg-emerald-400/[0.07]"
+                        : "border-amber-400/15 bg-amber-400/[0.07]"
+                    )}>
+                      <div className="text-white/35">发布授权</div>
+                      <div className={cn(
+                        "mt-0.5 font-semibold",
+                        isAccountAuthorized(account) ? "text-emerald-300" : "text-amber-300"
+                      )}>
+                        {isAccountAuthorized(account) ? "已授权" : "需重新授权"}
+                      </div>
+                    </div>
+                    <div className={cn(
+                      "rounded-md border px-2.5 py-2",
+                      account.comment_authorization_status === "active"
+                        ? "border-cyan-400/15 bg-cyan-400/[0.07]"
+                        : "border-amber-400/15 bg-amber-400/[0.07]"
+                    )}>
+                      <div className="text-white/35">评论授权</div>
+                      <div className={cn(
+                        "mt-0.5 font-semibold",
+                        account.comment_authorization_status === "active"
+                          ? "text-cyan-300"
+                          : "text-amber-300"
+                      )}>
+                        {commentsEnabled
+                          || hasTikTokCommentAuthorization(account.comment_authorization_status)
+                          ? getCommentAuthorizationLabel(account)
+                          : "当前环境未启用"}
+                      </div>
+                    </div>
+                  </div>
+                  {commentsEnabled && account.comment_authorization_status !== "active" && (
+                    <p className="mt-2 text-[10px] leading-4 text-cyan-100/45">
+                      评论授权是独立流程；请在 TikTok 授权页选择与此发布账号相同的账号。
+                    </p>
+                  )}
 
                   <div className="mt-auto flex items-end justify-between gap-3">
                     <div className="flex items-center gap-6">
@@ -1850,14 +2043,53 @@ export default function TikTokAccountsPage() {
                       </div>
                     </div>
 
-                    {account.group_name ? (
-                      <span className="inline-flex max-w-[46%] items-center gap-1 rounded-md border border-[#00F2EA]/18 bg-[#00F2EA]/8 px-2 py-1 text-[11px] font-medium text-[#7ffbf7]">
-                        <Layers3 className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{account.group_name}</span>
-                      </span>
-                    ) : (
-                      <span className="h-6" aria-hidden="true" />
-                    )}
+                    <div className="flex min-w-0 flex-col items-end gap-1.5">
+                      {(commentsEnabled
+                        || hasTikTokCommentAuthorization(account.comment_authorization_status)) && (
+                        <div className="flex items-center gap-1.5">
+                          {commentsEnabled && (
+                            <button
+                              type="button"
+                              onClick={() => handleCommentConnect(account.id)}
+                              disabled={
+                                commentConnectingId === account.id
+                                || commentDisconnectingId === account.id
+                                || account.comment_authorization_status === "disconnecting"
+                              }
+                              title={account.comment_authorization_status === "active"
+                                ? "刷新当前已关联 TikTok Business 账号的评论授权"
+                                : "为此发布账号关联 TikTok Business 评论授权"}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-cyan-300/15 bg-cyan-300/[0.07] px-2.5 py-1.5 text-[11px] font-semibold text-cyan-200 transition-colors hover:bg-cyan-300/[0.12] disabled:opacity-50"
+                            >
+                              {commentConnectingId === account.id
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <MessageCircle className="h-3 w-3" />}
+                              {account.comment_authorization_status === "active" ? "刷新评论授权" : "开启评论授权"}
+                            </button>
+                          )}
+                          {canDisconnectTikTokCommentAuthorization(account.comment_authorization_status) && (
+                            <button
+                            type="button"
+                            onClick={() => handleCommentDisconnect(account.id)}
+                            disabled={commentDisconnectingId === account.id || commentConnectingId === account.id}
+                            title="仅断开评论授权，不影响发布授权"
+                            className="rounded-md border border-rose-300/15 bg-rose-300/[0.06] px-2.5 py-1.5 text-[11px] font-semibold text-rose-200 transition-colors hover:bg-rose-300/[0.12] disabled:opacity-50"
+                          >
+                            {commentDisconnectingId === account.id ? "断开中…" : "断开评论"}
+                            </button>
+                          )}
+                          {account.comment_authorization_status === "disconnecting" && (
+                            <span className="text-[11px] font-semibold text-amber-200">撤销处理中</span>
+                          )}
+                        </div>
+                      )}
+                      {account.group_name && (
+                        <span className="inline-flex max-w-[150px] items-center gap-1 rounded-md border border-[#00F2EA]/18 bg-[#00F2EA]/8 px-2 py-1 text-[11px] font-medium text-[#7ffbf7]">
+                          <Layers3 className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{account.group_name}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2279,7 +2511,7 @@ export default function TikTokAccountsPage() {
           <div className="px-6 pb-4 pt-6">
             <DialogTitle className="flex items-center gap-3 text-[22px] font-bold tracking-tight text-white">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/15 to-[#EC4899]/20" style={{ boxShadow: "0 0 20px rgba(0,242,234,0.15), inset 0 1px 1px rgba(255,255,255,0.1)" }}>
-                <UserPlus className="h-[18px] w-[18px] text-[#00F2EA]" />
+                <TikTokLogo className="h-[18px] w-[18px] text-white" />
               </div>
               选择绑定方式
             </DialogTitle>

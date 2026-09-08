@@ -65,6 +65,7 @@ export async function GET(
                 plan_round,
                 plan_account_position,
                 source_video_name,
+                tiktok_transfer_method,
                 processing_started_at,
                 publish_init_started_at,
                 last_status_check_at,
@@ -97,8 +98,13 @@ export async function GET(
             return NextResponse.json({ error: '获取任务项失败' }, { status: 500 })
         }
 
+        const publicItems = (items || []).map(item => ({
+            ...item,
+            video_url: item.tiktok_transfer_method === 'FILE_UPLOAD' ? '' : item.video_url,
+        }))
+
         return NextResponse.json({
-            items: items || [],
+            items: publicItems,
             pagination: {
                 page,
                 limit,

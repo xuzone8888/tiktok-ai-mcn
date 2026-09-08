@@ -24,6 +24,9 @@ REQUIRED_VARS=(
     "SORA2_API_KEY"
     "SUCHUANG_API_KEY"
     "NEXT_PUBLIC_APP_URL"
+    "TIKTOK_CLIENT_KEY"
+    "TIKTOK_CLIENT_SECRET"
+    "TIKTOK_REDIRECT_URI"
 )
 
 # 可选的环境变量
@@ -45,22 +48,20 @@ fi
 echo -e "${GREEN}✅ 找到 $ENV_FILE 文件${NC}"
 echo ""
 
-# 加载环境变量
-set -a
-source "$ENV_FILE"
-set +a
+# Never source an env file here. Deployment validation treats it as data so
+# shell commands, expansions, and `set -x` inside the file cannot execute.
+env_has_value() {
+    node -e 'const { loadEffectiveEnv } = require("./scripts/tiktok-production-readiness.cjs"); const name = process.argv[2]; const value = loadEffectiveEnv(process.argv[1], "app", process.env)[name]; process.exit(String(value || "").trim() ? 0 : 1)' "$ENV_FILE" "$1"
+}
 
 # 检查必需变量
 MISSING_VARS=()
 for var in "${REQUIRED_VARS[@]}"; do
-    if [ -z "${!var}" ]; then
+    if ! env_has_value "$var"; then
         MISSING_VARS+=("$var")
         echo -e "${RED}❌ 缺失: $var${NC}"
     else
-        # 显示变量名但不显示值（安全）
-        value_length=${#!var}
-        masked_value=$(printf '*%.0s' $(seq 1 $value_length))
-        echo -e "${GREEN}✅ $var = $masked_value${NC}"
+        echo -e "${GREEN}✅ $var 已配置${NC}"
     fi
 done
 
@@ -69,12 +70,10 @@ echo ""
 # 检查可选变量
 echo "可选环境变量:"
 for var in "${OPTIONAL_VARS[@]}"; do
-    if [ -z "${!var}" ]; then
+    if ! env_has_value "$var"; then
         echo -e "${YELLOW}⚠️  未设置: $var (可选)${NC}"
     else
-        value_length=${#!var}
-        masked_value=$(printf '*%.0s' $(seq 1 $value_length))
-        echo -e "${GREEN}✅ $var = $masked_value${NC}"
+        echo -e "${GREEN}✅ $var 已配置${NC}"
     fi
 done
 
@@ -83,6 +82,9 @@ echo ""
 # 总结
 if [ ${#MISSING_VARS[@]} -eq 0 ]; then
     echo -e "${GREEN}✨ 所有必需的环境变量已配置！${NC}"
+    echo ""
+    echo "检查 TikTok 生产开关与 Broker 依赖..."
+    node scripts/tiktok-production-readiness.cjs --role=app --env="$ENV_FILE"
     exit 0
 else
     echo -e "${RED}❌ 缺少以下必需的环境变量:${NC}"
@@ -93,11 +95,6 @@ else
     echo "请在 $ENV_FILE 文件中添加这些变量"
     exit 1
 fi
-
-
-
-
-
 
 
 

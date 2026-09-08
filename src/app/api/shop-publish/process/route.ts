@@ -46,7 +46,9 @@ export async function POST() {
         // ⚠️ shop-publish-processor.ts will be created in Cycle C
         // For now, we mark tasks as processing and return
         // The actual processor logic will be implemented in Cycle C
-        const taskIds = pendingTasks.map(t => t.id);
+        // Type-only compatibility: the legacy untyped shop table query widens after adding
+        // a token table whose primary key is account_id. Runtime Shop behavior is unchanged.
+        const taskIds = (pendingTasks as unknown as Array<{ id: string }>).map(t => t.id);
 
         // Mark tasks as processing
         const { error: updateError } = await supabase

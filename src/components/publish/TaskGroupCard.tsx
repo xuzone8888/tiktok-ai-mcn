@@ -53,7 +53,7 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
 export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }: TaskGroupCardProps) {
     const [cancelling, setCancelling] = useState(false)
     const isMultiTask = task.workflow === 'multi_task'
-    const displayStatus = isMultiTask && task.display_status ? task.display_status : task.status
+    const displayStatus = task.display_status || task.status
     const config = statusConfig[displayStatus] || statusConfig[task.status] || statusConfig.pending
     const StatusIcon = config.icon
 
@@ -230,7 +230,10 @@ export function TaskGroupCard({ task, onViewDetail, onCancelPending, onDelete }:
                             <Square className="w-3.5 h-3.5" />
                         </Button>
                     )}
-                    {onDelete && (
+                    {onDelete
+                        && (task.active_count || 0) === 0
+                        && (task.confirming_count || 0) === 0
+                        && (task.review_count || 0) === 0 && (
                         <Button
                             variant="ghost"
                             size="icon"

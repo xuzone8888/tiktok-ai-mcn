@@ -1,6 +1,7 @@
 // Get all TikTok accounts for the current user
 import { NextResponse } from 'next/server';
 
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getDemoAccountsResponse, isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import type { Json } from '@/types/database';
@@ -24,6 +25,29 @@ interface TikTokAccountRow {
     created_at: string;
     updated_at: string;
     group_id: string | null;
+}
+
+function isMissingBusinessTokenTable(error: { code?: string; message?: string } | null) {
+    const message = error?.message?.toLowerCase() || '';
+    return Boolean(
+        error
+        && (error.code === '42P01' || error.code === 'PGRST205')
+        && message.includes('tiktok_business_account_tokens')
+    );
+}
+
+function getCommentAuthorizationStatus(
+    authorization: {
+        status: string;
+        refresh_token_expires_at: string;
+    } | undefined,
+    hasCommentScopes: boolean
+) {
+    if (!authorization) return 'not_connected';
+    if (authorization.status === 'revocation_pending') return 'disconnecting';
+    const refreshExpired = new Date(authorization.refresh_token_expires_at).getTime() <= Date.now();
+    if (authorization.status !== 'active' || refreshExpired) return 'expired';
+    return hasCommentScopes ? 'active' : 'incomplete';
 }
 
 export async function GET() {
@@ -81,28 +105,66 @@ export async function GET() {
             return NextResponse.json({ accounts: [] });
         }
 
+        const admin = createAdminClient();
+        const accountIds = accounts.map((account) => account.id);
+        const { data: businessTokens, error: businessTokenError } = accountIds.length > 0
+            ? await admin
+                .from('tiktok_business_account_tokens')
+                .select('account_id, access_token_expires_at, refresh_token_expires_at, scopes, status')
+                .in('account_id', accountIds)
+            : { data: [], error: null };
+
+        if (businessTokenError && !isMissingBusinessTokenTable(businessTokenError)) {
+            console.error('Error fetching TikTok Business authorization status:', businessTokenError);
+            return NextResponse.json(
+                { error: 'Failed to fetch comment authorization status' },
+                { status: 500 }
+            );
+        }
+
+        const businessAuthorizationByAccount = new Map(
+            (businessTokens || []).map((token) => [token.account_id, token])
+        );
         const groupNameById = new Map((groupsData || []).map((group) => [group.id, group.name]));
 
         // Remove sensitive data before returning
-        const safeAccounts = accounts.map(account => ({
-            id: account.id,
-            open_id: account.open_id,
-            username: account.username,  // Include the TikTok @handle
-            display_name: account.display_name,
-            avatar_url: account.avatar_url,
-            follower_count: account.follower_count,
-            following_count: account.following_count,
-            likes_count: account.likes_count,
-            video_count: account.video_count,
-            account_type: account.account_type,
-            status: account.status,
-            token_expires_at: account.token_expires_at,
-            scopes: Array.isArray(account.scopes) ? account.scopes : [],
-            created_at: account.created_at,
-            updated_at: account.updated_at,
-            group_id: account.group_id,
-            group_name: account.group_id ? groupNameById.get(account.group_id) || null : null,
-        }));
+        const safeAccounts = accounts.map(account => {
+            const businessAuthorization = businessAuthorizationByAccount.get(account.id);
+            const commentScopes = Array.isArray(businessAuthorization?.scopes)
+                ? businessAuthorization.scopes.filter((scope): scope is string => typeof scope === 'string')
+                : [];
+            const hasCommentScopes =
+                commentScopes.includes('comment.list')
+                && commentScopes.includes('comment.list.manage');
+            const commentAuthorizationStatus = getCommentAuthorizationStatus(
+                businessAuthorization,
+                hasCommentScopes
+            );
+
+            return {
+                id: account.id,
+                open_id: account.open_id,
+                username: account.username,  // Include the TikTok @handle
+                display_name: account.display_name,
+                avatar_url: account.avatar_url,
+                follower_count: account.follower_count,
+                following_count: account.following_count,
+                likes_count: account.likes_count,
+                video_count: account.video_count,
+                account_type: account.account_type,
+                status: account.status,
+                token_expires_at: account.token_expires_at,
+                scopes: Array.isArray(account.scopes) ? account.scopes : [],
+                created_at: account.created_at,
+                updated_at: account.updated_at,
+                group_id: account.group_id,
+                group_name: account.group_id ? groupNameById.get(account.group_id) || null : null,
+                comment_authorization_status: commentAuthorizationStatus,
+                comment_scopes: commentScopes,
+                comment_access_token_expires_at: businessAuthorization?.access_token_expires_at || null,
+                comment_refresh_token_expires_at: businessAuthorization?.refresh_token_expires_at || null,
+            };
+        });
 
         return NextResponse.json({ accounts: safeAccounts });
     } catch (error) {

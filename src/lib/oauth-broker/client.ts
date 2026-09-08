@@ -1,12 +1,12 @@
-// CN-only OAuth egress shim（方案 C）：把 CN 打不通的 Meta/Google OAuth 服务端调用
+// CN-only OAuth egress shim（方案 C）：把 CN 打不通的 Meta/Google/TikTok OAuth 服务端调用
 // 转给美国 broker 完成。仅当 OAUTH_BROKER_URL 配置时启用（CN 生产）；本地 dev / 美国 worker /
 // broker 自身都不设它 → 调用方走原直连逻辑，行为零变化。
 //
 // 不需要 undici/ProxyAgent：这只是一个普通 HTTPS fetch，目标是一个 CN 够得到的美国端点
-//（只有 Meta/Google 那几个域被 CN 墙，普通美国 VPS 自定义端口可达）。transport 细节（URL/密钥）
+//（provider 域名由 broker 的闭合白名单控制，普通美国 VPS 自定义端口可达）。transport 细节（URL/密钥）
 // 全走 env，不写死。
 
-export type BrokerPlatform = 'facebook' | 'youtube' | 'instagram'
+export type BrokerPlatform = 'facebook' | 'youtube' | 'instagram' | 'tiktok'
 
 const BROKER_TIMEOUT_MS = 15000
 
@@ -55,6 +55,7 @@ type BrokerResponse<T> =
       code?: string | null
       retryable?: boolean
       retryAfter?: string | null
+      providerWriteOutcome?: 'rejected' | 'unknown' | null
     }
 
 interface BrokerCallOptions {
@@ -119,6 +120,7 @@ export async function callBroker<T>(
     code?: string
     retryable?: boolean
     retryAfter?: string | null
+    providerWriteOutcome?: 'rejected' | 'unknown'
   }
   if (typeof data.httpStatus === 'number') {
     error.httpStatus = data.httpStatus
@@ -126,5 +128,8 @@ export async function callBroker<T>(
   if (typeof data.code === 'string' && data.code) error.code = data.code
   if (typeof data.retryable === 'boolean') error.retryable = data.retryable
   if (typeof data.retryAfter === 'string' || data.retryAfter === null) error.retryAfter = data.retryAfter
+  if (data.providerWriteOutcome === 'rejected' || data.providerWriteOutcome === 'unknown') {
+    error.providerWriteOutcome = data.providerWriteOutcome
+  }
   throw error
 }

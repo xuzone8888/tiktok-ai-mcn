@@ -407,9 +407,11 @@ test('does not merge previously granted YouTube OAuth scopes', () => {
 })
 
 test('publishes aligned YouTube privacy, terms, consent, and deletion disclosures', () => {
+  assert.match(privacyPage, /August 8, 2026/)
+  assert.match(privacyPage, /2026年8月8日/)
+  assert.match(termsPage, /July 23, 2026/)
+  assert.match(termsPage, /2026年7月23日/)
   for (const page of [privacyPage, termsPage]) {
-    assert.match(page, /July 23, 2026/)
-    assert.match(page, /2026年7月23日/)
     assert.match(page, /YouTube Terms|YouTube API Services/)
     assert.match(page, /Google Privacy Policy/)
     assert.match(page, /security\.google\.com\/settings\/security\/permissions/)

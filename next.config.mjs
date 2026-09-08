@@ -90,6 +90,10 @@ const nextConfig = {
   },
   // 生产环境优化
   poweredByHeader: false,
+  // OAuth providers require byte-for-byte callback URI matching. Let API
+  // handlers accept their registered trailing-slash form without a framework
+  // 308 that rewrites the request URI before state/code processing.
+  skipTrailingSlashRedirect: true,
   // 压缩
   compress: true,
   // 实验性功能

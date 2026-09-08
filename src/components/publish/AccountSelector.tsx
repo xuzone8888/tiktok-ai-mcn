@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
-import { Users, Loader2, RefreshCw, AlertCircle, Check } from 'lucide-react'
+import { Loader2, RefreshCw, AlertCircle, Check } from 'lucide-react'
+import { TikTokLogo } from '@/components/brand/TikTokLogo'
 import { Button } from '@/components/ui/button'
 import { TikTokAccount } from '@/types/publish'
 import { cn } from '@/lib/utils'
@@ -71,11 +72,11 @@ export function AccountSelector({
     if (accounts.length === 0) {
         return (
             <div className="text-center py-8">
-                <Users className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+                <TikTokLogo className="mx-auto mb-3 h-12 w-12 text-white/40" aria-label="TikTok" />
                 <p className="text-gray-400 mb-4">暂无可用账号</p>
                 <Button
                     variant="white-glow"
-                    onClick={() => window.location.href = '/publish/accounts'}
+                    onClick={() => window.location.href = '/tiktok-publish/accounts'}
                 >
                     绑定 TikTok 账号
                 </Button>

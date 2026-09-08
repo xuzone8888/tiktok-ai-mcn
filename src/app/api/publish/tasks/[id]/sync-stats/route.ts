@@ -1,31 +1,64 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server';
+
+import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import {
+    getTikTokAccountTokens,
+    getValidTikTokAccessToken,
+} from '@/lib/tiktok/token-manager';
+import {
+    chunkTikTokVideoIds,
+    hasTikTokVideoListScope,
+    queryTikTokVideoBatch,
+    TikTokVideoApiError,
+} from '@/lib/tiktok/video-api';
 
 interface RouteParams {
-    params: Promise<{ id: string }>
+    params: Promise<{ id: string }>;
 }
 
-// POST - Sync video statistics from TikTok
-export async function POST(request: NextRequest, { params }: RouteParams) {
-    // 1.14 Audit Build: feature flag 禁用 video/query
-    // 审核期间设置 ENABLE_VIDEO_STATS_SYNC=false 避免触发 video.list scope
+interface PublishedItem {
+    id: string;
+    status: string;
+    tiktok_video_id: string;
+    account: {
+        id: string;
+        open_id: string;
+        user_id: string;
+        account_type: string;
+        scopes: unknown;
+    } | null;
+}
+
+interface TikTokStatsUpdate extends Record<string, string | number> {
+    item_id: string;
+    view_count: number;
+    like_count: number;
+    comment_count: number;
+    share_count: number;
+}
+
+function accountLabel(account: PublishedItem['account']) {
+    return account?.open_id ? account.open_id.slice(0, 8) : '未知账号';
+}
+
+// POST - Safely refresh statistics for the task's published TikTok videos.
+export async function POST(_request: NextRequest, { params }: RouteParams) {
     if (process.env.ENABLE_VIDEO_STATS_SYNC === 'false') {
         return NextResponse.json(
             { error: '视频数据同步功能当前已禁用（审核模式）', disabled: true },
             { status: 503 }
-        )
+        );
     }
 
     try {
-        const { id: taskId } = await params
-        const supabase = await createClient()
-
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        const { id: taskId } = await params;
+        const supabase = await createClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) {
-            return NextResponse.json({ error: '请先登录' }, { status: 401 })
+            return NextResponse.json({ error: '请先登录' }, { status: 401 });
         }
 
-        // Get task with published items that have tiktok_video_id
         const { data: task, error: fetchError } = await supabase
             .from('publish_tasks')
             .select(`
@@ -37,142 +70,148 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     account:tiktok_accounts(
                         id,
                         open_id,
-                        access_token,
-                        token_expires_at
+                        user_id,
+                        account_type,
+                        scopes
                     )
                 )
             `)
             .eq('id', taskId)
             .eq('user_id', user.id)
-            .single()
+            .single();
 
         if (fetchError || !task) {
-            return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+            return NextResponse.json({ error: '任务不存在' }, { status: 404 });
         }
 
-        // Filter published items with tiktok_video_id
-        const publishedItems = ((task as any).items || []).filter(
-            (item: any) => item.status === 'published' && item.tiktok_video_id
-        )
-
+        const publishedItems = (((task as unknown as { items?: PublishedItem[] }).items) || [])
+            .filter((item) => item.tiktok_video_id && item.status === 'published');
         if (publishedItems.length === 0) {
             return NextResponse.json({
                 success: true,
                 message: '没有已发布的视频需要同步',
-                synced: 0
-            })
+                synced: 0,
+            });
         }
 
-        // Group items by account for batch API calls
-        const itemsByAccount = new Map<string, { account: any; items: any[] }>()
+        const itemsByAccount = new Map<string, { account: NonNullable<PublishedItem['account']>; items: PublishedItem[] }>();
+        const errors: string[] = [];
         for (const item of publishedItems) {
-            const account = item.account
-            if (!account?.access_token) continue
-
-            const key = account.id
-            if (!itemsByAccount.has(key)) {
-                itemsByAccount.set(key, { account, items: [] })
+            const account = item.account;
+            if (
+                !account?.id
+                || account.user_id !== user.id
+                || account.user_id !== task.user_id
+                || account.account_type !== 'normal'
+            ) {
+                errors.push(`视频 ${item.tiktok_video_id} 的账号归属无效`);
+                continue;
             }
-            itemsByAccount.get(key)!.items.push(item)
+            if (!hasTikTokVideoListScope(account.scopes)) {
+                errors.push(`账号 ${accountLabel(account)} 缺少 video.list，请重新授权`);
+                continue;
+            }
+            const entry = itemsByAccount.get(account.id) || { account, items: [] };
+            entry.items.push(item);
+            itemsByAccount.set(account.id, entry);
         }
 
-        let totalSynced = 0
-        let totalViews = 0
-        let totalLikes = 0
-        const errors: string[] = []
+        const admin = createAdminClient();
+        const tokenMap = await getTikTokAccountTokens(admin, [...itemsByAccount.keys()]);
+        const successfulUpdates = new Map<string, TikTokStatsUpdate>();
 
-        // Fetch stats for each account's videos
-        const accountEntries = Array.from(itemsByAccount.values())
-        for (const { account, items } of accountEntries) {
+        for (const { account, items } of itemsByAccount.values()) {
+            const token = tokenMap.get(account.id);
+            if (!token) {
+                errors.push(`账号 ${accountLabel(account)} 授权凭证不存在`);
+                continue;
+            }
+
+            let accessToken: string;
             try {
-                // Check if token is expired
-                if (new Date(account.token_expires_at) < new Date()) {
-                    errors.push(`账号 ${account.open_id} token已过期`)
-                    continue
-                }
+                accessToken = await getValidTikTokAccessToken(admin, account.id, token);
+            } catch {
+                errors.push(`账号 ${accountLabel(account)} 的授权刷新失败`);
+                continue;
+            }
 
-                const videoIds = items.map((item: any) => item.tiktok_video_id)
-
-                // TikTok API: Query video info
-                // Note: TikTok API allows max 20 video IDs per request
-                const batchSize = 20
-                for (let i = 0; i < videoIds.length; i += batchSize) {
-                    const batchIds = videoIds.slice(i, i + batchSize)
-
-                    const response = await fetch(
-                        `https://open.tiktokapis.com/v2/video/query/?fields=id,like_count,comment_count,share_count,view_count`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${account.access_token}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                filters: {
-                                    video_ids: batchIds
-                                }
-                            })
-                        }
-                    )
-
-                    if (!response.ok) {
-                        const errorText = await response.text()
-                        console.error('TikTok API error:', errorText)
-                        errors.push(`TikTok API错误: ${response.status}`)
-                        continue
+            const itemsByVideoId = new Map<string, PublishedItem[]>();
+            for (const item of items) {
+                const matchingItems = itemsByVideoId.get(item.tiktok_video_id) || [];
+                matchingItems.push(item);
+                itemsByVideoId.set(item.tiktok_video_id, matchingItems);
+            }
+            for (const batchIds of chunkTikTokVideoIds([...itemsByVideoId.keys()])) {
+                try {
+                    const videos = await queryTikTokVideoBatch(accessToken, batchIds);
+                    const returnedIds = new Set(videos.map((video) => video.id));
+                    for (const missingId of batchIds.filter((id) => !returnedIds.has(id))) {
+                        errors.push(`TikTok 未返回视频 ${missingId}，已保留原统计`);
                     }
 
-                    const data = await response.json()
-                    const videos = data.data?.videos || []
-
-                    // Update each item with stats
                     for (const video of videos) {
-                        const item = items.find((i: any) => i.tiktok_video_id === video.id)
-                        if (!item) continue
-
-                        const stats = {
-                            view_count: video.view_count || 0,
-                            like_count: video.like_count || 0,
-                            comment_count: video.comment_count || 0,
-                            share_count: video.share_count || 0,
-                            stats_updated_at: new Date().toISOString()
+                        const matchingItems = itemsByVideoId.get(video.id) || [];
+                        for (const item of matchingItems) {
+                            successfulUpdates.set(item.id, {
+                                item_id: item.id,
+                                view_count: video.view_count,
+                                like_count: video.like_count,
+                                comment_count: video.comment_count,
+                                share_count: video.share_count,
+                            });
                         }
-
-                        await supabase
-                            .from('publish_task_items')
-                            .update(stats)
-                            .eq('id', item.id)
-
-                        totalViews += stats.view_count
-                        totalLikes += stats.like_count
-                        totalSynced++
                     }
+                } catch (error) {
+                    const code = error instanceof TikTokVideoApiError ? error.code : 'unknown_error';
+                    errors.push(`账号 ${accountLabel(account)} 的一批视频同步失败（${code}），已保留原统计`);
                 }
-            } catch (err) {
-                console.error('Error syncing stats for account:', err)
-                errors.push(`同步失败: ${err}`)
             }
         }
 
-        // Update task totals
-        await supabase
-            .from('publish_tasks')
-            .update({
-                total_views: totalViews,
-                total_likes: totalLikes
-            })
-            .eq('id', taskId)
+        const { data: aggregateResult, error: aggregateError } = await admin.rpc(
+            'apply_tiktok_task_video_stats',
+            {
+                p_task_id: taskId,
+                p_user_id: user.id,
+                p_updates: [...successfulUpdates.values()],
+            }
+        );
+        if (aggregateError || !aggregateResult || typeof aggregateResult !== 'object') {
+            return NextResponse.json({
+                error: '视频统计保存失败，现有统计未被本次同步修改',
+                synced: 0,
+                errors,
+            }, { status: 500 });
+        }
+        const aggregate = aggregateResult as {
+            updated_count?: unknown;
+            total_views?: unknown;
+            total_likes?: unknown;
+        };
+        const totalSynced = Number(aggregate.updated_count);
+        const totalViews = Number(aggregate.total_views);
+        const totalLikes = Number(aggregate.total_likes);
+        if (
+            !Number.isSafeInteger(totalSynced)
+            || !Number.isSafeInteger(totalViews)
+            || !Number.isSafeInteger(totalLikes)
+        ) {
+            return NextResponse.json({
+                error: '视频统计已保存，但任务聚合响应无效',
+                synced: 0,
+                errors,
+            }, { status: 500 });
+        }
 
         return NextResponse.json({
             success: true,
             synced: totalSynced,
             total_views: totalViews,
             total_likes: totalLikes,
-            errors: errors.length > 0 ? errors : undefined
-        })
-
+            errors: errors.length > 0 ? errors : undefined,
+        });
     } catch (error) {
-        console.error('Error syncing video stats:', error)
-        return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+        console.error('Error syncing video stats:', error);
+        return NextResponse.json({ error: '服务器错误' }, { status: 500 });
     }
 }

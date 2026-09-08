@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as facebookOAuth from '@/lib/facebook/oauth'
 import * as instagramOAuth from '@/lib/instagram/oauth'
 import * as socialComments from '@/lib/social-comments/platform-api'
+import * as tiktokBusinessOAuth from '@/lib/tiktok/business-oauth'
 import * as youtubeOAuth from '@/lib/youtube/oauth'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +17,7 @@ function isAuthorized(request: NextRequest): boolean {
   return request.headers.get('authorization') === `Bearer ${secret}`
 }
 
-type BrokerPlatform = 'facebook' | 'youtube' | 'instagram'
+type BrokerPlatform = 'facebook' | 'youtube' | 'instagram' | 'tiktok'
 
 type BrokerFn = (...args: unknown[]) => Promise<unknown>
 
@@ -58,10 +59,32 @@ const OPS: Record<BrokerPlatform, Record<string, { fn: BrokerFn; params: string[
     listInstagramComments: { fn: socialComments.listInstagramComments as BrokerFn, params: ['token', 'externalContentId'] },
     replyToInstagramComment: { fn: socialComments.replyToInstagramComment as BrokerFn, params: ['token', 'parentExternalCommentId', 'externalContentId', 'message'] },
   },
+  tiktok: {
+    exchangeTikTokBusinessCodeForToken: {
+      fn: tiktokBusinessOAuth.exchangeTikTokBusinessCodeForToken as BrokerFn,
+      params: ['authCode'],
+    },
+    refreshTikTokBusinessAccessToken: {
+      fn: tiktokBusinessOAuth.refreshTikTokBusinessAccessToken as BrokerFn,
+      params: ['refreshToken'],
+    },
+    revokeTikTokBusinessAccessToken: {
+      fn: tiktokBusinessOAuth.revokeTikTokBusinessAccessToken as BrokerFn,
+      params: ['accessToken'],
+    },
+    listTikTokComments: {
+      fn: socialComments.listTikTokComments as BrokerFn,
+      params: ['token', 'externalContentId', 'budget'],
+    },
+    replyToTikTokComment: {
+      fn: socialComments.replyToTikTokComment as BrokerFn,
+      params: ['token', 'parentExternalCommentId', 'externalContentId', 'message'],
+    },
+  },
 }
 
 function isPlatform(p: unknown): p is BrokerPlatform {
-  return p === 'facebook' || p === 'youtube' || p === 'instagram'
+  return p === 'facebook' || p === 'youtube' || p === 'instagram' || p === 'tiktok'
 }
 
 export async function POST(request: NextRequest) {
@@ -98,6 +121,7 @@ export async function POST(request: NextRequest) {
           httpStatus?: unknown
           retryable?: unknown
           retryAfter?: unknown
+          providerWriteOutcome?: unknown
         }
       : null
     const httpStatus =
@@ -116,6 +140,11 @@ export async function POST(request: NextRequest) {
         retryAfter: typeof providerError?.retryAfter === 'string' || providerError?.retryAfter === null
           ? providerError.retryAfter
           : null,
+        providerWriteOutcome:
+          providerError?.providerWriteOutcome === 'rejected'
+          || providerError?.providerWriteOutcome === 'unknown'
+            ? providerError.providerWriteOutcome
+            : null,
       },
       { status: 200 },
     )

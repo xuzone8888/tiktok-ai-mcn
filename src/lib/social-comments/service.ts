@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from 'node:crypto'
+
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mergeActionLogMetadata } from '@/lib/social-comments/action-log'
 import {
@@ -23,9 +25,11 @@ import {
   INSTAGRAM_COMMENT_SYNC_LIMITS,
   listFacebookComments,
   listInstagramComments,
+  listTikTokComments,
   listYouTubeComments,
   replyToFacebookComment,
   replyToInstagramComment,
+  replyToTikTokComment,
   replyToYouTubeComment,
   SocialCommentApiError,
   SocialCommentUnsupportedError,
@@ -48,15 +52,31 @@ import {
 } from '@/lib/social-comments/platform-capabilities'
 import type { SocialCommentSyncCompleteness } from '@/lib/social-comments/types'
 import { resolveSocialCommentPersistence } from '@/lib/social-comments/persistence-policy'
+import {
+  getTikTokBusinessCommentToken,
+  TikTokBusinessTokenAccessError,
+} from '@/lib/tiktok/business-token-manager'
+import {
+  countUnicodeCodePoints,
+  isTikTokCommentReplyWithinLimit,
+  TIKTOK_COMMENT_REPLY_MAX_CODE_POINTS,
+} from '@/lib/tiktok/comment-text'
+import { getTikTokCommentReadLimits } from '@/lib/tiktok/business-comment-limits'
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000
 const MAX_SYNC_TARGETS = 10
 const REPLY_THROTTLE_MS = 10_000
+const TIKTOK_REPLY_DISPATCH_STALE_MS = 60_000
+const TIKTOK_REPLY_RECONCILE_WINDOW_MS = 2 * 60 * 1000
 const SYNC_THROTTLE_MS = 60_000
 const AUTO_SYNC_THROTTLE_MS = 5 * 60 * 1000
 const TIKTOK_UNSUPPORTED_MESSAGE = 'TikTok Login Kit and Content Posting API do not provide creator comment reading or reply endpoints. Open the published TikTok content on TikTok to manage comments.'
 
 type SyncSource = 'manual' | 'auto'
+
+function replyMessageHash(message: string) {
+  return createHash('sha256').update(message, 'utf8').digest('hex')
+}
 
 interface PlatformAccountToken {
   platform: SocialPlatform
@@ -94,6 +114,7 @@ interface SyncOptions {
 interface ReplyOptions {
   enabledPlatforms?: SocialPlatform[]
   instagramReplyEnabled?: boolean
+  tiktokReplyEnabled?: boolean
 }
 
 interface RecentSyncTargetResult {
@@ -169,6 +190,7 @@ function mapApiError(error: unknown, fallbackMessage: string) {
       retryable: error.retryable,
       httpStatus: error.httpStatus,
       retryAfter: error.retryAfter,
+      providerWriteOutcome: error.providerWriteOutcome,
     }
   }
 
@@ -180,6 +202,7 @@ function mapApiError(error: unknown, fallbackMessage: string) {
     retryable: false,
     httpStatus: 500,
     retryAfter: null,
+    providerWriteOutcome: null,
   }
 }
 
@@ -191,14 +214,36 @@ function errorObservabilityMetadata(mapped: ReturnType<typeof mapApiError>) {
   }
 }
 
-function commentCapability(platform: SocialPlatform, scopes: string[], status: string): SocialAccountSummary['comment_capability'] {
+function commentCapability(
+  platform: SocialPlatform,
+  scopes: string[],
+  status: string,
+  commentAuthorization?: {
+    scopes: string[]
+    status: string
+    refreshTokenExpiresAt: string | null
+  } | null,
+): SocialAccountSummary['comment_capability'] {
   const capability = getSocialCommentPlatformCapabilities(platform)
   if (capability.read === 'unsupported') return 'unsupported'
   if (capability.read === 'needs_verification') return 'needs_verification'
-  if (platform === 'tiktok') return 'unsupported'
 
   if (status !== 'active') {
     return 'needs_reconnect'
+  }
+
+  if (platform === 'tiktok') {
+    if (
+      commentAuthorization?.status !== 'active'
+      || !commentAuthorization.scopes.includes('comment.list')
+      || !commentAuthorization.refreshTokenExpiresAt
+      || new Date(commentAuthorization.refreshTokenExpiresAt).getTime() <= Date.now()
+    ) {
+      return 'needs_reconnect'
+    }
+    return commentAuthorization.scopes.includes('comment.list.manage')
+      ? 'ready'
+      : 'read_only'
   }
 
   const canRead = hasRequiredCommentScopes(platform, 'read', scopes)
@@ -214,10 +259,20 @@ function buildAccountSummary(
   externalIdKey: string,
   nameKey: string,
   handleKey: string | null,
-  avatarKey: string
+  avatarKey: string,
+  commentAuthorization?: {
+    scopes: string[]
+    status: string
+    refreshTokenExpiresAt: string | null
+  } | null,
 ): SocialAccountSummary {
   const scopes = normalizeScopes(row.scopes)
-  const capability = commentCapability(platform, scopes, row.status || 'unknown')
+  const capability = commentCapability(
+    platform,
+    scopes,
+    row.status || 'unknown',
+    commentAuthorization,
+  )
   return {
     id: row.id,
     platform,
@@ -471,7 +526,34 @@ async function getPlatformToken(userId: string, platform: SocialPlatform, accoun
   if (platform === 'youtube') return getYouTubeToken(admin, userId, accountId)
   if (platform === 'facebook') return getFacebookToken(admin, userId, accountId)
   if (platform === 'instagram') return getInstagramToken(admin, userId, accountId)
-  throw new SocialCommentUnsupportedError('tiktok', TIKTOK_UNSUPPORTED_MESSAGE)
+  try {
+    const token = await getTikTokBusinessCommentToken(admin, userId, accountId)
+    return {
+      platform: 'tiktok',
+      accountId: token.accountId,
+      accountExternalId: token.businessOpenId,
+      accountName: token.accountName,
+      accessToken: token.accessToken,
+      scopes: token.scopes,
+    }
+  } catch (error) {
+    if (error instanceof TikTokBusinessTokenAccessError) {
+      throw new SocialCommentApiError(
+        'tiktok',
+        error.code,
+        error.message,
+        error.httpStatus,
+        error.retryable,
+      )
+    }
+    const message = error instanceof Error ? error.message : 'TikTok comment authorization failed.'
+    throw new SocialCommentApiError(
+      'tiktok',
+      'missing_comment_authorization',
+      message,
+      403,
+    )
+  }
 }
 
 export async function getSocialCommentAccounts(
@@ -519,9 +601,42 @@ export async function getSocialCommentAccounts(
     }
   }
 
+  const tiktokAccountIds = (tiktok.data || []).map((row: any) => row.id).filter(Boolean)
+  let tiktokAuthorizationByAccount = new Map<string, {
+    scopes: string[]
+    status: string
+    refreshTokenExpiresAt: string | null
+  }>()
+  if (tiktokAccountIds.length > 0) {
+    const { data: authorizations, error: authorizationError } = await admin
+      .from('tiktok_business_account_tokens')
+      .select('account_id, scopes, status, refresh_token_expires_at')
+      .in('account_id', tiktokAccountIds)
+
+    if (authorizationError) throw new Error(authorizationError.message)
+    tiktokAuthorizationByAccount = new Map(
+      (authorizations || []).map((row: any) => [
+        String(row.account_id),
+        {
+          scopes: normalizeScopes(row.scopes),
+          status: String(row.status || 'unknown'),
+          refreshTokenExpiresAt: row.refresh_token_expires_at || null,
+        },
+      ]),
+    )
+  }
+
   return [
     ...(youtube.data || []).map((row: any) => buildAccountSummary('youtube', row, 'channel_id', 'channel_title', 'channel_handle', 'thumbnail_url')),
-    ...(tiktok.data || []).map((row: any) => buildAccountSummary('tiktok', row, 'open_id', 'display_name', 'username', 'avatar_url')),
+    ...(tiktok.data || []).map((row: any) => buildAccountSummary(
+      'tiktok',
+      row,
+      'open_id',
+      'display_name',
+      'username',
+      'avatar_url',
+      tiktokAuthorizationByAccount.get(String(row.id)) || null,
+    )),
     ...(instagram.data || []).map((row: any) => buildAccountSummary('instagram', row, 'channel_id', 'channel_title', 'channel_handle', 'thumbnail_url')),
     ...(facebook.data || []).map((row: any) => buildAccountSummary('facebook', row, 'channel_id', 'channel_title', 'channel_handle', 'thumbnail_url')),
   ]
@@ -590,6 +705,7 @@ function mapContentRows(
     const url = typeof value === 'string' ? value.trim() : ''
     if (!url) return null
     if (platform === 'facebook' && url.startsWith('/')) return `https://www.facebook.com${url}`
+    if (platform === 'tiktok' && !/^https?:\/\//i.test(url)) return null
     return url
   }
 
@@ -977,6 +1093,65 @@ async function completeSyncRun(
     .eq('id', runId)
 }
 
+async function readTikTokCommentResumeState(
+  admin: any,
+  userId: string,
+  accountId: string,
+  externalContentId: string,
+): Promise<{
+  topLevelCursor: number | null
+  replyResume: {
+    parent_ids: string[]
+    observed_parent_ids: string[]
+    cursor: number | null
+  } | null
+}> {
+  try {
+    const { data, error } = await admin
+      .from('social_comment_sync_runs')
+      .select('metadata')
+      .eq('user_id', userId)
+      .eq('platform', 'tiktok')
+      .eq('account_id', accountId)
+      .eq('external_content_id', externalContentId)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) return { topLevelCursor: null, replyResume: null }
+    const value = data?.metadata?.provider_resume_cursor
+    const rawReplyResume = data?.metadata?.provider_reply_resume
+    const parentIds = Array.isArray(rawReplyResume?.parent_ids)
+      ? rawReplyResume.parent_ids.filter(
+        (item: unknown): item is string => typeof item === 'string' && item.length > 0,
+      ).slice(0, 500)
+      : []
+    const rawReplyCursor = rawReplyResume?.cursor
+    const observedParentIds = Array.isArray(rawReplyResume?.observed_parent_ids)
+      ? rawReplyResume.observed_parent_ids.filter(
+        (item: unknown): item is string => typeof item === 'string' && item.length > 0,
+      ).slice(0, 500)
+      : parentIds
+    const replyCursor = rawReplyCursor === null
+      ? null
+      : Number.isSafeInteger(rawReplyCursor) && rawReplyCursor >= 0
+      ? rawReplyCursor
+      : undefined
+    return {
+      topLevelCursor: Number.isSafeInteger(value) && value >= 0 ? value : null,
+      replyResume: parentIds.length > 0 && replyCursor !== undefined
+        ? {
+          parent_ids: parentIds,
+          observed_parent_ids: observedParentIds,
+          cursor: replyCursor,
+        }
+        : null,
+    }
+  } catch {
+    return { topLevelCursor: null, replyResume: null }
+  }
+}
+
 async function insertActionLog(
   admin: any,
   input: {
@@ -1020,14 +1195,15 @@ async function completeActionLog(
   admin: any,
   logId: string | undefined,
   userId: string,
-  status: 'sent' | 'completed' | 'failed' | 'unsupported',
+  status: 'sent' | 'completed' | 'failed' | 'unsupported' | 'unknown',
   input: {
     errorCode?: string | null
     errorMessage?: string | null
     metadata?: Record<string, unknown>
+    fromStatuses?: Array<'running' | 'sent' | 'unknown' | 'failed' | 'unsupported'>
   } = {}
 ) {
-  if (!logId) return
+  if (!logId) return false
   const { data: existing, error: readError } = await admin
     .from('social_comment_action_logs')
     .select('metadata')
@@ -1037,7 +1213,7 @@ async function completeActionLog(
 
   if (readError) throw readError
 
-  const { error: updateError } = await admin
+  let updateQuery = admin
     .from('social_comment_action_logs')
     .update({
       status,
@@ -1048,8 +1224,49 @@ async function completeActionLog(
     })
     .eq('id', logId)
     .eq('user_id', userId)
+  const fromStatuses = input.fromStatuses
+    || (status === 'sent' ? ['running', 'sent'] as const : null)
+  if (fromStatuses) {
+    updateQuery = updateQuery.in('status', [...fromStatuses])
+  }
+  if (input.fromStatuses) {
+    const { data: updated, error: updateError } = await updateQuery
+      .select('id')
+      .maybeSingle()
+    if (updateError) throw updateError
+    return Boolean(updated)
+  }
+  const { error: updateError } = await updateQuery
 
   if (updateError) throw updateError
+  return true
+}
+
+async function transitionTikTokReplyAction(
+  admin: any,
+  userId: string,
+  actionLogId: string,
+  replyAttemptToken: string,
+  fromStatuses: Array<'running' | 'sent' | 'failed' | 'unsupported' | 'unknown'>,
+  toStatus: 'sent' | 'failed' | 'unsupported' | 'unknown',
+  input: {
+    errorCode?: string | null
+    errorMessage?: string | null
+    metadata?: Record<string, unknown>
+  } = {},
+) {
+  const { data, error } = await admin.rpc('transition_tiktok_reply_action', {
+    p_user_id: userId,
+    p_action_log_id: actionLogId,
+    p_reply_attempt_token: replyAttemptToken,
+    p_from_statuses: fromStatuses,
+    p_to_status: toStatus,
+    p_error_code: input.errorCode || null,
+    p_error_message: input.errorMessage || null,
+    p_metadata: input.metadata || {},
+  })
+  if (error) throw error
+  return data === true
 }
 
 async function logCommentErrorAction(
@@ -1279,6 +1496,68 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
         top_level_limit: 500,
         truncated,
       }
+    } else if (target.platform === 'tiktok') {
+      const token = await getPlatformToken(userId, target.platform, target.accountId)
+      const limits = getTikTokCommentReadLimits()
+      const resumeState = await readTikTokCommentResumeState(
+        admin,
+        userId,
+        target.accountId,
+        content.external_content_id,
+      )
+      const [topLevelReservation, replyReservation] = await Promise.all([
+        admin.rpc('claim_tiktok_business_api_budget', {
+          p_account_id: target.accountId,
+          p_user_id: userId,
+          p_endpoint: 'comment.list',
+          p_requested_requests: limits.topLevelRequestBudget,
+          p_window_limit: limits.perEndpointRequestsPerMinute,
+        }),
+        admin.rpc('claim_tiktok_business_api_budget', {
+          p_account_id: target.accountId,
+          p_user_id: userId,
+          p_endpoint: 'comment.reply.list',
+          p_requested_requests: limits.replyRequestBudget,
+          p_window_limit: limits.perEndpointRequestsPerMinute,
+        }),
+      ])
+      if (
+        topLevelReservation.error
+        || replyReservation.error
+        || topLevelReservation.data !== true
+        || replyReservation.data !== true
+      ) {
+        throw new SocialCommentApiError(
+          'tiktok',
+          'comment_read_rate_limited',
+          'TikTok comment synchronization is temporarily rate limited. Try again after the current window.',
+          429,
+          true,
+          '60',
+        )
+      }
+      const result = await listTikTokComments(token, content.external_content_id, {
+        topLevelRequests: limits.topLevelRequestBudget,
+        replyRequests: limits.replyRequestBudget,
+        resumeCursor: resumeState.topLevelCursor,
+        replyResume: resumeState.replyResume,
+      })
+      comments = result.comments
+      truncated = result.truncated
+      repliesFetched = result.replies_fetched
+      threadCompleteness = result.thread_completeness
+      syncMetadata = {
+        ...syncMetadata,
+        pagination_complete: !result.truncated,
+        replies_fetched: result.replies_fetched,
+        provider_raw_count: result.comments.length,
+        mapped_count: result.comments.length,
+        top_level_limit: 500,
+        reply_limit_per_comment: 500,
+        provider_resume_cursor: result.provider_resume_cursor ?? null,
+        provider_reply_resume: result.provider_reply_resume ?? null,
+        truncated,
+      }
     } else if (target.platform === 'instagram') {
       const token = await getPlatformToken(userId, target.platform, target.accountId)
       assertScopes('instagram', 'read', token.scopes)
@@ -1344,6 +1623,17 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
       provider_visibility_mismatch: target.platform === 'instagram'
         ? syncMetadata.provider_visibility_mismatch === true
         : undefined,
+    }
+
+    if (target.platform === 'tiktok') {
+      await reconcileUnknownTikTokReplies(
+        admin,
+        userId,
+        target.accountId,
+        content.id,
+        content.external_content_id,
+        comments,
+      )
     }
 
     const commentsToSave = target.platform === 'instagram'
@@ -1478,10 +1768,6 @@ export async function assertCommentReplyTargetOwned(
     throw new SocialCommentApiError(comment.platform, 'cannot_reply', 'Only inbound comments can be replied to.', 400)
   }
 
-  if (comment.platform === 'tiktok') {
-    throw new SocialCommentUnsupportedError('tiktok', TIKTOK_UNSUPPORTED_MESSAGE)
-  }
-
   const admin = createAdminClient() as any
   return findOwnedPublishedTaskItemForComment(admin, userId, comment)
 }
@@ -1514,31 +1800,97 @@ async function getSavedReplyFromActionLog(admin: any, userId: string, actionLog:
   return row ? mapSavedComment(row) : null
 }
 
-async function enforceReplyThrottle(admin: any, userId: string, comment: SavedSocialComment, currentLogId: string) {
-  const since = new Date(Date.now() - REPLY_THROTTLE_MS).toISOString()
+function providerReplyFromActionLog(actionLog: any): ExternalSocialComment | null {
+  const value = actionLog?.metadata?.provider_reply
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (
+    typeof value.external_comment_id !== 'string'
+    || !value.external_comment_id.trim()
+    || typeof value.external_content_id !== 'string'
+    || !value.external_content_id.trim()
+    || typeof value.message !== 'string'
+    || !value.message.trim()
+  ) {
+    return null
+  }
+  return value as ExternalSocialComment
+}
+
+async function assertNoUnknownReplyOutcome(
+  admin: any,
+  userId: string,
+  comment: SavedSocialComment,
+) {
+  const providerTarget = comment.parent_external_comment_id || comment.external_comment_id
   const { data, error } = await admin
     .from('social_comment_action_logs')
-    .select('id')
+    .select('id, external_comment_id, metadata')
     .eq('user_id', userId)
     .eq('platform', comment.platform)
     .eq('account_id', comment.account_id)
-    .eq('external_comment_id', comment.external_comment_id)
+    .eq('action_type', 'reply')
+    .eq('status', 'unknown')
+
+  if (error) throw new Error(error.message)
+  const hasUnknownProviderTarget = Array.isArray(data) && data.some((row) => (
+    (row?.metadata?.parent_external_comment_id || row?.external_comment_id) === providerTarget
+  ))
+  if (hasUnknownProviderTarget) {
+    throw new SocialCommentApiError(
+      comment.platform,
+      'reply_outcome_unknown',
+      'A previous reply has an unknown provider outcome. Sync comments before retrying.',
+      409,
+    )
+  }
+}
+
+async function enforceReplyThrottle(
+  admin: any,
+  userId: string,
+  comment: SavedSocialComment,
+  currentLogId: string,
+  replyAttemptToken?: string,
+) {
+  const since = new Date(Date.now() - REPLY_THROTTLE_MS).toISOString()
+  const providerTarget = comment.parent_external_comment_id || comment.external_comment_id
+  const { data, error } = await admin
+    .from('social_comment_action_logs')
+    .select('id, external_comment_id, metadata')
+    .eq('user_id', userId)
+    .eq('platform', comment.platform)
+    .eq('account_id', comment.account_id)
     .eq('action_type', 'reply')
     .in('status', ['running', 'sent', 'completed'])
     .gte('created_at', since)
     .neq('id', currentLogId)
-    .limit(1)
 
   if (error) throw new Error(error.message)
-  if (Array.isArray(data) && data.length > 0) {
-    await completeActionLog(admin, currentLogId, userId, 'failed', {
+  const hasRecentProviderTarget = Array.isArray(data) && data.some((row) => (
+    (row?.metadata?.parent_external_comment_id || row?.external_comment_id) === providerTarget
+  ))
+  if (hasRecentProviderTarget) {
+    const transitionInput = {
       errorCode: 'reply_throttled',
       errorMessage: 'Please wait before replying to this comment again.',
       metadata: {
         comment_id: comment.id,
         throttle_ms: REPLY_THROTTLE_MS,
       },
-    })
+    }
+    if (comment.platform === 'tiktok' && replyAttemptToken) {
+      await transitionTikTokReplyAction(
+        admin,
+        userId,
+        currentLogId,
+        replyAttemptToken,
+        ['running'],
+        'failed',
+        transitionInput,
+      )
+    } else {
+      await completeActionLog(admin, currentLogId, userId, 'failed', transitionInput)
+    }
     throw new SocialCommentApiError(comment.platform, 'reply_throttled', 'Please wait before replying to this comment again.', 429)
   }
 }
@@ -1547,8 +1899,15 @@ async function startReplyActionLog(
   admin: any,
   userId: string,
   comment: SavedSocialComment,
-  idempotencyKey: string
-): Promise<{ logId: string; existingReply?: never } | { logId?: never; existingReply: SavedSocialComment }> {
+  idempotencyKey: string,
+  replyMessage: string,
+): Promise<
+  | { logId: string; replyAttemptToken: string; existingReply?: never; providerReply?: never }
+  | { logId?: never; existingReply: SavedSocialComment; providerReply?: never }
+  | { logId: string; replyAttemptToken: string; existingReply?: never; providerReply: ExternalSocialComment }
+> {
+  await assertNoUnknownReplyOutcome(admin, userId, comment)
+  const replyAttemptToken = randomUUID()
   try {
     const log = await insertActionLog(admin, {
       userId,
@@ -1560,10 +1919,13 @@ async function startReplyActionLog(
       idempotencyKey,
       metadata: {
         comment_id: comment.id,
+        parent_external_comment_id: comment.parent_external_comment_id || comment.external_comment_id,
+        reply_message_hash: replyMessageHash(replyMessage),
+        reply_attempt_token: replyAttemptToken,
       },
     })
-    await enforceReplyThrottle(admin, userId, comment, log.id)
-    return { logId: log.id }
+    await enforceReplyThrottle(admin, userId, comment, log.id, replyAttemptToken)
+    return { logId: log.id, replyAttemptToken }
   } catch (error: any) {
     if (error?.code !== '23505') throw error
 
@@ -1571,13 +1933,38 @@ async function startReplyActionLog(
     if (!existing) {
       throw new SocialCommentApiError(comment.platform, 'duplicate_request_running', 'A duplicate reply request is already running.', 409)
     }
-    if (existing.platform !== comment.platform || existing.account_id !== comment.account_id || existing.external_comment_id !== comment.external_comment_id) {
+    const existingProviderTarget = existing?.metadata?.parent_external_comment_id || existing.external_comment_id
+    const requestedProviderTarget = comment.parent_external_comment_id || comment.external_comment_id
+    if (
+      existing.platform !== comment.platform
+      || existing.account_id !== comment.account_id
+      || existingProviderTarget !== requestedProviderTarget
+    ) {
       throw new SocialCommentApiError(comment.platform, 'idempotency_key_conflict', 'This idempotency key was already used for another reply target.', 409)
     }
 
     if (existing.status === 'sent' || existing.status === 'completed') {
       const reply = await getSavedReplyFromActionLog(admin, userId, existing)
       if (reply) return { existingReply: reply }
+      const providerReply = providerReplyFromActionLog(existing)
+      if (existing.status === 'sent' && providerReply) {
+        const existingAttemptToken = typeof existing?.metadata?.reply_attempt_token === 'string'
+          ? existing.metadata.reply_attempt_token
+          : ''
+        if (!existingAttemptToken) {
+          throw new SocialCommentApiError(
+            comment.platform,
+            'duplicate_request_sent',
+            'This reply request is missing its attempt fence.',
+            409,
+          )
+        }
+        return {
+          logId: existing.id,
+          replyAttemptToken: existingAttemptToken,
+          providerReply,
+        }
+      }
       throw new SocialCommentApiError(comment.platform, 'duplicate_request_sent', 'This reply request already completed.', 409)
     }
 
@@ -1585,7 +1972,205 @@ async function startReplyActionLog(
       throw new SocialCommentApiError(comment.platform, 'duplicate_request_running', 'A duplicate reply request is already running.', 409)
     }
 
+    if (existing.status === 'failed' || existing.status === 'unsupported') {
+      const { data: restarted, error: restartError } = await admin
+        .from('social_comment_action_logs')
+        .update({
+          status: 'running',
+          error_code: null,
+          error_message: null,
+          metadata: mergeActionLogMetadata(existing.metadata, {
+            comment_id: comment.id,
+            parent_external_comment_id: comment.parent_external_comment_id || comment.external_comment_id,
+            reply_message_hash: replyMessageHash(replyMessage),
+            reply_attempt_token: replyAttemptToken,
+            provider_dispatch_started_at: null,
+            restarted_at: new Date().toISOString(),
+          }),
+          completed_at: null,
+        })
+        .eq('id', existing.id)
+        .eq('user_id', userId)
+        .in('status', ['failed', 'unsupported'])
+        .select('*')
+        .maybeSingle()
+      if (restartError) throw restartError
+      if (!restarted) {
+        throw new SocialCommentApiError(comment.platform, 'duplicate_request_running', 'A duplicate reply request is already running.', 409)
+      }
+      await enforceReplyThrottle(
+        admin,
+        userId,
+        comment,
+        existing.id,
+        replyAttemptToken,
+      )
+      return { logId: existing.id, replyAttemptToken }
+    }
+
     throw new SocialCommentApiError(comment.platform, 'duplicate_request_failed', 'This reply request already has a terminal status.', 409)
+  }
+}
+
+async function markTikTokReplyDispatchStarted(
+  admin: any,
+  userId: string,
+  actionLogId: string,
+  replyAttemptToken: string,
+) {
+  const { data: marked, error } = await admin.rpc('mark_tiktok_reply_dispatch_started', {
+    p_user_id: userId,
+    p_action_log_id: actionLogId,
+    p_reply_attempt_token: replyAttemptToken,
+  })
+  if (error) throw error
+  if (marked !== true) {
+    throw new SocialCommentApiError(
+      'tiktok',
+      'duplicate_request_running',
+      'This reply request is no longer eligible for provider dispatch.',
+      409,
+    )
+  }
+}
+
+async function finalizeSocialCommentReply(
+  admin: any,
+  userId: string,
+  actionLogId: string,
+  replyAttemptToken: string,
+  parentExternalCommentId: string,
+  taskItemId: string | null,
+  externalReply: ExternalSocialComment,
+): Promise<SavedSocialComment> {
+  const { data, error } = await admin.rpc('finalize_social_comment_reply', {
+    p_user_id: userId,
+    p_action_log_id: actionLogId,
+    p_reply_attempt_token: replyAttemptToken,
+    p_parent_external_comment_id: parentExternalCommentId,
+    p_task_item_id: taskItemId,
+    p_reply: externalReply,
+  })
+  if (error) throw new Error(error.message)
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row) throw new Error('Reply finalization returned no row.')
+  return mapSavedComment(row)
+}
+
+export async function reconcileUnknownTikTokReplies(
+  admin: any,
+  userId: string,
+  accountId: string,
+  taskItemId: string,
+  externalContentId: string,
+  providerComments: ExternalSocialComment[],
+) {
+  const { data: unknownActions, error } = await admin
+    .from('social_comment_action_logs')
+    .select('id, status, metadata, created_at')
+    .eq('user_id', userId)
+    .eq('platform', 'tiktok')
+    .eq('account_id', accountId)
+    .eq('external_content_id', externalContentId)
+    .eq('action_type', 'reply')
+    .in('status', ['running', 'unknown'])
+
+  if (error) throw new Error(error.message)
+  for (const action of unknownActions || []) {
+    const messageHash = typeof action?.metadata?.reply_message_hash === 'string'
+      ? action.metadata.reply_message_hash
+      : ''
+    const parentExternalId = typeof action?.metadata?.parent_external_comment_id === 'string'
+      ? action.metadata.parent_external_comment_id
+      : ''
+    const replyAttemptToken = typeof action?.metadata?.reply_attempt_token === 'string'
+      ? action.metadata.reply_attempt_token
+      : ''
+    const hasDispatchTimestamp = typeof action?.metadata?.provider_dispatch_started_at === 'string'
+      && action.metadata.provider_dispatch_started_at.trim() !== ''
+    if (action.status === 'running' && !hasDispatchTimestamp) {
+      if (!replyAttemptToken) continue
+      const { data: abandoned, error: abandonedError } = await admin.rpc(
+        'abandon_stale_tiktok_reply_dispatch',
+        {
+          p_user_id: userId,
+          p_action_log_id: action.id,
+          p_reply_attempt_token: replyAttemptToken,
+        },
+      )
+      if (abandonedError) throw abandonedError
+      if (abandoned !== true) {
+        continue
+      }
+      continue
+    }
+
+    const dispatchStartedAt = hasDispatchTimestamp
+      ? action.metadata.provider_dispatch_started_at
+      : action.created_at
+    const actionTime = new Date(dispatchStartedAt).getTime()
+    if (!messageHash || !parentExternalId || !Number.isFinite(actionTime)) continue
+
+    if (action.status === 'running' && Date.now() - actionTime >= TIKTOK_REPLY_DISPATCH_STALE_MS) {
+      if (!replyAttemptToken) continue
+      const { data: transitioned, error: transitionError } = await admin.rpc(
+        'mark_stale_tiktok_reply_dispatch_unknown',
+        {
+          p_user_id: userId,
+          p_action_log_id: action.id,
+          p_reply_attempt_token: replyAttemptToken,
+        },
+      )
+      if (transitionError) throw transitionError
+      if (!transitioned) continue
+      action.status = 'unknown'
+    }
+
+    const candidates = providerComments
+      .filter((comment) => {
+        if (
+          !comment.is_from_account
+          || comment.parent_external_comment_id !== parentExternalId
+          || replyMessageHash(comment.message.trim()) !== messageHash
+          || !comment.remote_created_at
+        ) {
+          return false
+        }
+        const remoteTime = new Date(comment.remote_created_at).getTime()
+        return Number.isFinite(remoteTime)
+          && remoteTime >= actionTime - TIKTOK_REPLY_RECONCILE_WINDOW_MS
+          && remoteTime <= actionTime + TIKTOK_REPLY_RECONCILE_WINDOW_MS
+      })
+
+    if (candidates.length !== 1) continue
+    const matched = candidates[0]
+    try {
+      await finalizeSocialCommentReply(
+        admin,
+        userId,
+        action.id,
+        typeof action?.metadata?.reply_attempt_token === 'string'
+          ? action.metadata.reply_attempt_token
+          : '',
+        parentExternalId,
+        taskItemId,
+        {
+          ...matched,
+          metadata: {
+            ...(matched.metadata || {}),
+            reconciled_from_unknown: true,
+          },
+        },
+      )
+    } catch (finalizeError) {
+      const { data: latest, error: latestError } = await admin
+        .from('social_comment_action_logs')
+        .select('status')
+        .eq('id', action.id)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (latestError || latest?.status !== 'completed') throw finalizeError
+    }
   }
 }
 
@@ -1600,59 +2185,147 @@ export async function replyToSocialComment(
   if (!trimmed) {
     throw new SocialCommentApiError('youtube', 'empty_reply', 'Reply message cannot be empty.', 400)
   }
-  if (trimmed.length > 2000) {
-    throw new SocialCommentApiError('youtube', 'reply_too_long', 'Reply message cannot exceed 2000 characters.', 400)
-  }
   const idempotencyKeyTrimmed = idempotencyKey.trim()
   if (!idempotencyKeyTrimmed) {
     throw new SocialCommentApiError('youtube', 'missing_idempotency_key', 'Reply idempotency key is required.', 400)
   }
 
   const comment = await getCommentForReply(userId, commentId)
+  if (countUnicodeCodePoints(trimmed) > 2000) {
+    throw new SocialCommentApiError(
+      comment.platform,
+      'reply_too_long',
+      'Reply message cannot exceed 2000 Unicode characters.',
+      400,
+    )
+  }
   if (options.enabledPlatforms && !options.enabledPlatforms.includes(comment.platform)) {
     throw new SocialCommentApiError(comment.platform, 'comment_not_found', 'Comment not found or not accessible.', 404)
   }
-  if (!isSocialCommentReplyPlatformEnabled(comment.platform, options.instagramReplyEnabled === true)) {
-    throw new SocialCommentApiError('instagram', 'reply_disabled', 'Instagram comment replies are disabled.', 403)
+  if (!isSocialCommentReplyPlatformEnabled(
+    comment.platform,
+    options.instagramReplyEnabled === true,
+    options.tiktokReplyEnabled === true,
+  )) {
+    throw new SocialCommentApiError(
+      comment.platform,
+      'reply_disabled',
+      `${comment.platform} comment replies are disabled.`,
+      403,
+    )
   }
   const ownedContent = await assertCommentReplyTargetOwned(userId, comment)
   if (!comment.can_reply) {
     throw new SocialCommentApiError(comment.platform, 'cannot_reply', 'This comment cannot be replied to with the current account.', 400)
   }
+  if (comment.platform === 'tiktok' && !isTikTokCommentReplyWithinLimit(trimmed)) {
+    throw new SocialCommentApiError(
+      'tiktok',
+      'reply_too_long',
+      `TikTok reply message cannot exceed ${TIKTOK_COMMENT_REPLY_MAX_CODE_POINTS} Unicode characters.`,
+      400,
+    )
+  }
 
   const admin = createAdminClient() as any
-  const action = await startReplyActionLog(admin, userId, comment, idempotencyKeyTrimmed)
+  const action = await startReplyActionLog(admin, userId, comment, idempotencyKeyTrimmed, trimmed)
   if (action.existingReply) return action.existingReply
 
   const actionLogId = action.logId
   const parentExternalCommentId = comment.parent_external_comment_id || comment.external_comment_id
   let token: PlatformAccountToken | null = null
   let externalReply: ExternalSocialComment
+  let providerAccepted = Boolean(action.providerReply)
 
   try {
-    token = await getPlatformToken(userId, comment.platform, comment.account_id)
-    if (comment.platform === 'youtube') {
-      assertScopes('youtube', 'reply', token.scopes)
-      externalReply = await replyToYouTubeComment(token, parentExternalCommentId, trimmed)
-    } else if (comment.platform === 'instagram') {
-      assertScopes('instagram', 'reply', token.scopes)
-      externalReply = await replyToInstagramComment(token, parentExternalCommentId, comment.external_content_id, trimmed)
-    } else if (comment.platform === 'facebook') {
-      assertScopes('facebook', 'reply', token.scopes)
-      externalReply = await replyToFacebookComment(token, parentExternalCommentId, comment.external_content_id, trimmed)
+    if (action.providerReply) {
+      externalReply = action.providerReply
     } else {
-      throw new SocialCommentUnsupportedError('tiktok', TIKTOK_UNSUPPORTED_MESSAGE)
+      token = await getPlatformToken(userId, comment.platform, comment.account_id)
+      if (comment.platform === 'youtube') {
+        assertScopes('youtube', 'reply', token.scopes)
+        externalReply = await replyToYouTubeComment(token, parentExternalCommentId, trimmed)
+      } else if (comment.platform === 'instagram') {
+        assertScopes('instagram', 'reply', token.scopes)
+        externalReply = await replyToInstagramComment(token, parentExternalCommentId, comment.external_content_id, trimmed)
+      } else if (comment.platform === 'facebook') {
+        assertScopes('facebook', 'reply', token.scopes)
+        externalReply = await replyToFacebookComment(token, parentExternalCommentId, comment.external_content_id, trimmed)
+      } else if (comment.platform === 'tiktok') {
+        if (!token.scopes.includes('comment.list.manage')) {
+          throw new SocialCommentApiError(
+            'tiktok',
+            'missing_comment_scope',
+            'TikTok comment management permission is missing. Refresh the comment authorization and try again.',
+            403,
+          )
+        }
+        await markTikTokReplyDispatchStarted(
+          admin,
+          userId,
+          actionLogId,
+          action.replyAttemptToken,
+        )
+        externalReply = await replyToTikTokComment(
+          token,
+          parentExternalCommentId,
+          comment.external_content_id,
+          trimmed,
+        )
+      } else {
+        throw new SocialCommentUnsupportedError('tiktok', TIKTOK_UNSUPPORTED_MESSAGE)
+      }
+
+      externalReply.external_content_id = comment.external_content_id
+      externalReply.parent_external_comment_id = parentExternalCommentId
+      externalReply.thread_external_id = parentExternalCommentId
+      externalReply.is_from_account = true
+      externalReply.author_id = externalReply.author_id || token.accountExternalId
+      externalReply.author_name = externalReply.author_name || token.accountName
+      externalReply.metadata = {
+        ...(externalReply.metadata || {}),
+        idempotency_key: idempotencyKeyTrimmed,
+      }
+
+      if (comment.platform === 'tiktok') {
+        providerAccepted = true
+        const receiptPersisted = await transitionTikTokReplyAction(
+          admin,
+          userId,
+          actionLogId,
+          action.replyAttemptToken,
+          ['running', 'sent'],
+          'sent',
+          {
+            metadata: {
+              comment_id: comment.id,
+              parent_external_comment_id: parentExternalCommentId,
+              external_reply_id: externalReply.external_comment_id,
+              provider_reply: externalReply,
+            },
+          },
+        )
+        if (!receiptPersisted) {
+          throw new SocialCommentApiError(
+            'tiktok',
+            'reply_attempt_fenced',
+            'This TikTok reply attempt was superseded before its receipt could be saved.',
+            409,
+          )
+        }
+      }
     }
 
-    externalReply.external_content_id = comment.external_content_id
-    externalReply.parent_external_comment_id = parentExternalCommentId
-    externalReply.thread_external_id = comment.thread_external_id || parentExternalCommentId
-    externalReply.is_from_account = true
-    externalReply.author_id = externalReply.author_id || token.accountExternalId
-    externalReply.author_name = externalReply.author_name || token.accountName
-    externalReply.metadata = {
-      ...(externalReply.metadata || {}),
-      idempotency_key: idempotencyKeyTrimmed,
+    if (comment.platform === 'tiktok') {
+      return await finalizeSocialCommentReply(
+        admin,
+        userId,
+        actionLogId,
+        action.replyAttemptToken,
+        parentExternalCommentId,
+        ownedContent.id,
+        externalReply,
+      )
     }
 
     const saved = await upsertComments(
@@ -1663,11 +2336,10 @@ export async function replyToSocialComment(
       [externalReply],
       'outbound',
       'sent',
-      comment.id
+      comment.id,
     )
     const reply = saved[0]
-
-    await admin
+    const { error: countError } = await admin
       .from('social_comments')
       .update({
         reply_count: Math.max(0, comment.reply_count + 1),
@@ -1675,6 +2347,7 @@ export async function replyToSocialComment(
       })
       .eq('id', comment.id)
       .eq('user_id', userId)
+    if (countError) throw new Error(countError.message)
 
     await completeActionLog(admin, actionLogId, userId, 'sent', {
       metadata: {
@@ -1684,20 +2357,73 @@ export async function replyToSocialComment(
         external_reply_id: reply.external_comment_id,
       },
     })
-
     return reply
   } catch (error) {
     const mapped = mapApiError(error, 'Reply failed.')
-    const terminalStatus = mapped.unsupported ? 'unsupported' : 'failed'
-    await completeActionLog(admin, actionLogId, userId, terminalStatus, {
+    const providerOutcomeUnknown = comment.platform === 'tiktok'
+      && !providerAccepted
+      && (
+        mapped.providerWriteOutcome === 'unknown'
+        || (mapped.providerWriteOutcome === null && mapped.code === 'provider_unreachable')
+      )
+    const terminalStatus = providerAccepted
+      ? 'sent'
+      : providerOutcomeUnknown
+        ? 'unknown'
+        : mapped.unsupported
+          ? 'unsupported'
+          : 'failed'
+    const terminalInput = {
       errorCode: mapped.code,
       errorMessage: mapped.message,
       metadata: {
         comment_id: comment.id,
         parent_external_comment_id: parentExternalCommentId,
+        ...(providerAccepted ? { provider_reply: externalReply! } : {}),
+        provider_outcome_unknown: providerOutcomeUnknown,
         ...errorObservabilityMetadata(mapped),
       },
-    })
+    }
+    const terminalPersisted = comment.platform === 'tiktok'
+      ? await transitionTikTokReplyAction(
+        admin,
+        userId,
+        actionLogId,
+        action.replyAttemptToken,
+        terminalStatus === 'sent'
+          ? ['running', 'sent']
+          : terminalStatus === 'unknown'
+            ? ['running', 'unknown']
+            : ['running'],
+        terminalStatus,
+        terminalInput,
+      ).catch(() => null)
+      : await completeActionLog(admin, actionLogId, userId, terminalStatus, {
+        ...terminalInput,
+        fromStatuses: terminalStatus === 'sent'
+          ? ['running', 'sent']
+          : terminalStatus === 'unknown'
+            ? ['running', 'unknown']
+            : ['running'],
+      }).catch(() => null)
+    if (terminalPersisted === false) {
+      const { data: winner, error: winnerError } = await admin
+        .from('social_comment_action_logs')
+        .select('*')
+        .eq('id', actionLogId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (!winnerError && winner?.status === 'completed') {
+        const savedWinner = await getSavedReplyFromActionLog(admin, userId, winner)
+        if (savedWinner) return savedWinner
+      }
+      if (
+        comment.platform === 'tiktok'
+        && winner?.metadata?.reply_attempt_token !== action.replyAttemptToken
+      ) {
+        throw error
+      }
+    }
     if (mapped.code === 'missing_comment_scope') {
       await logCommentErrorAction(admin, userId, comment.platform, 'permission_error', {
         accountId: comment.account_id,

@@ -45,6 +45,12 @@ export interface SocialCommentSyncCompleteness {
   truncated: boolean
   provider_reported_comment_count?: number | null
   provider_visibility_mismatch?: boolean
+  provider_resume_cursor?: number | null
+  provider_reply_resume?: {
+    parent_ids: string[]
+    observed_parent_ids: string[]
+    cursor: number | null
+  } | null
 }
 
 export interface SocialCommentListResult extends SocialCommentSyncCompleteness {

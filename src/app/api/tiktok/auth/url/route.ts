@@ -9,6 +9,7 @@ import {
 } from '@/lib/tiktok/auth-diagnostics';
 import { isTikTokGroupsDemoMode } from '@/lib/tiktok/demo-account-groups';
 import { buildAuthorizationUrl } from '@/lib/tiktok/oauth';
+import { TIKTOK_ACCOUNTS_PATH } from '@/lib/tiktok/routes';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
         if (isTikTokGroupsDemoMode()) {
             return NextResponse.json({
                 demo: true,
-                authUrl: '/publish/accounts?demo=1',
+                authUrl: `${TIKTOK_ACCOUNTS_PATH}?demo=1`,
                 message: '本地预览模式已内置测试账号，真实 TikTok OAuth 绑定需在测试或生产环境验证。',
             });
         }

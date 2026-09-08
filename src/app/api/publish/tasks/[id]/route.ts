@@ -5,6 +5,36 @@ interface RouteParams {
     params: Promise<{ id: string }>
 }
 
+const AMBIGUOUS_PUBLISH_ERROR_CODES = new Set([
+    'TIKTOK_INIT_OUTCOME_UNKNOWN',
+    'WORKER_INTERRUPTED_NEEDS_REVIEW',
+])
+
+function itemRequiresPublishReview(item: {
+    status: string
+    error_code: string | null
+    tiktok_publish_id: string | null
+    tiktok_transfer_method: string | null
+    tiktok_upload_outcome: string | null
+    publish_init_started_at: string | null
+}): boolean {
+    if (['processing', 'uploading'].includes(item.status)) return true
+    if (item.error_code && AMBIGUOUS_PUBLISH_ERROR_CODES.has(item.error_code)) return true
+    if (
+        item.tiktok_transfer_method === 'FILE_UPLOAD'
+        && (Boolean(item.tiktok_publish_id) || Boolean(item.publish_init_started_at))
+    ) {
+        const explicitlyResolved = item.status === 'published'
+            || item.error_code === 'TIKTOK_STATUS_FAILED'
+            || (
+                item.error_code === 'TIKTOK_FILE_UPLOAD_INCOMPLETE'
+                && item.tiktok_upload_outcome === 'rejected'
+            )
+        return !explicitlyResolved
+    }
+    return false
+}
+
 // GET - Get task details with all items
 export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
@@ -50,9 +80,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             account_count: new Set(task.items?.map((i: { account_id: string }) => i.account_id)).size
         }
 
+        const {
+            items,
+            plan_config: _planConfig,
+            idempotency_key: _idempotencyKey,
+            ...publicTask
+        } = task
+        const publicItems = (items || []).map(item => {
+            const { dedupe_key: _dedupeKey, ...publicItem } = item
+            return {
+                ...publicItem,
+                video_url: item.tiktok_transfer_method === 'FILE_UPLOAD' ? '' : item.video_url,
+            }
+        })
+
         return NextResponse.json({
             task: {
-                ...task,
+                ...publicTask,
+                items: publicItems,
                 summary
             }
         })
@@ -77,7 +122,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         // Check if task exists and belongs to user
         const { data: task, error: fetchError } = await supabase
             .from('publish_tasks')
-            .select('id, status')
+            .select(`
+                id,
+                status,
+                items:publish_task_items(
+                    status,
+                    error_code,
+                    tiktok_publish_id,
+                    tiktok_transfer_method,
+                    tiktok_upload_outcome,
+                    publish_init_started_at
+                )
+            `)
             .eq('id', id)
             .eq('user_id', user.id)
             .single()
@@ -86,11 +142,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: '任务不存在' }, { status: 404 })
         }
 
-        // Don't allow deleting tasks that are currently processing
-        if (task.status === 'running') {
+        const guardedTask = task as unknown as {
+            status: string
+            items: Array<Parameters<typeof itemRequiresPublishReview>[0]> | null
+        }
+        if (
+            guardedTask.status === 'running'
+            || (guardedTask.items || []).some(itemRequiresPublishReview)
+        ) {
             return NextResponse.json({
-                error: '任务正在处理中，无法删除'
-            }, { status: 400 })
+                error: '任务仍在执行或发布结果无法确认，请先在 TikTok 中人工核对，暂不可删除',
+                requires_manual_review: true,
+            }, { status: 409 })
         }
 
         // Delete task items first

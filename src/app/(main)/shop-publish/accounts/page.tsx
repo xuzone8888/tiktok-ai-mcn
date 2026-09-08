@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import { useLang } from "@/contexts/LangContext";
+import { TikTokLogo } from "@/components/brand/TikTokLogo";
 import SHOP_TEXT, { localizeError, getAccountRemovedDesc, getRemoveDialogDesc, getInfoCardDesc, type Lang } from "@/components/shop-publish/shop-publish.i18n";
 import {
     AlertDialog,
@@ -296,7 +297,7 @@ export default function ShopAccountsPage() {
                     <div className="w-1 h-10 rounded-full bg-gradient-to-b from-[#CCFF00] via-[#00F2EA] to-[#EC4899] opacity-80" />
                     <div>
                         <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                            <Store className="h-5 w-5" />
+                            <TikTokLogo className="h-5 w-5 text-white" />
                             {T.title[lang]}
                         </h1>
                         <p className="text-white/50 text-xs mt-1">
@@ -362,7 +363,7 @@ export default function ShopAccountsPage() {
                 <div className="bg-white/5 rounded-2xl border border-white/10 backdrop-blur-sm">
                     <div className="flex flex-col items-center justify-center py-16">
                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#CCFF00]/20 via-[#00F2EA]/20 to-[#EC4899]/20 flex items-center justify-center mb-6 border border-white/10">
-                            <Store className="h-10 w-10 text-[#00F2EA]" />
+                            <TikTokLogo className="h-10 w-10 text-white" />
                         </div>
                         <h3 className="text-xl font-bold text-white mb-2">{T.noAccounts[lang]}</h3>
                         <p className="text-white/50 text-center max-w-md text-sm">

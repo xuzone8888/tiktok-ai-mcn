@@ -34,8 +34,16 @@ export function isInstagramCommentsReplyEnabled() {
   return process.env.INSTAGRAM_COMMENTS_REPLY_ENABLED === 'true'
 }
 
+export function isTikTokCommentsReplyEnabled() {
+  return process.env.TIKTOK_COMMENTS_REPLY_ENABLED === 'true'
+}
+
 export function isFacebookCommentsPageEnabled() {
   return process.env.NEXT_PUBLIC_FACEBOOK_COMMENTS_ENABLED === 'true'
+}
+
+export function isTikTokCommentsPageEnabled() {
+  return process.env.NEXT_PUBLIC_TIKTOK_COMMENTS_ENABLED === 'true'
 }
 
 export function isYouTubeCommentsAutoSyncEnabled() {

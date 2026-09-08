@@ -94,10 +94,8 @@ export async function POST(request: NextRequest) {
         // Generate public URL using custom domain
         const publicUrl = `https://${CUSTOM_DOMAIN}/${key}`
 
-        console.log('[OSS Credentials] Generated upload URL:', {
-            userId: user.id,
-            key,
-            expiration: `${expiration}s`,
+        console.log('[OSS Credentials] Generated upload authorization', {
+            expirationSeconds: expiration,
         })
 
         return NextResponse.json({
@@ -110,10 +108,10 @@ export async function POST(request: NextRequest) {
             }
         })
 
-    } catch (error) {
-        console.error('[OSS Credentials] Error:', error)
+    } catch {
+        console.error('[OSS Credentials] Failed to generate upload authorization')
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : "Failed to generate upload credentials" },
+            { success: false, error: "Failed to generate upload credentials" },
             { status: 500 }
         )
     }

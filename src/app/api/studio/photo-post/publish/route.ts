@@ -90,9 +90,6 @@ function checkPublishRate(userId: string): string | null {
 interface TikTokAccountRow {
   id: string;
   display_name: string | null;
-  access_token: string;
-  refresh_token: string;
-  access_token_expires_at: string | null;
   status: string | null;
 }
 
@@ -103,9 +100,10 @@ async function loadOwnAccount(
 ): Promise<TikTokAccountRow | null> {
   const { data } = await admin
     .from("tiktok_accounts")
-    .select("id, display_name, access_token, refresh_token, access_token_expires_at, status")
+    .select("id, display_name, status")
     .eq("user_id", userId)
     .eq("id", accountId)
+    .eq("account_type", "normal")
     .limit(1);
   const row = (data as unknown as TikTokAccountRow[] | null)?.[0];
   return row ?? null;
@@ -205,7 +203,7 @@ export async function POST(request: NextRequest) {
     try {
       accessToken = await getValidTikTokAccessToken(
         admin as unknown as SupabaseClient<Database>,
-        account
+        account.id
       );
     } catch (error) {
       console.error("[PhotoPost Publish] token refresh failed:", error);
@@ -307,7 +305,7 @@ export async function GET(request: NextRequest) {
     }
     const accessToken = await getValidTikTokAccessToken(
       admin as unknown as SupabaseClient<Database>,
-      account
+      account.id
     );
     const result = await checkPublishStatus(accessToken, publishId);
 

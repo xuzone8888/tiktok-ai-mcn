@@ -11,11 +11,24 @@ export interface BoundTikTokAccountResult {
     refreshTokenExpiresAt: Date;
 }
 
+function safeCount(value: number | undefined): number {
+    return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value as number : 0;
+}
+
 function splitScopes(scope: string | null | undefined) {
     return (scope || '')
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
+}
+
+function isMissingTokenTableError(error: { code?: string; message?: string } | null) {
+    const message = error?.message?.toLowerCase() || '';
+    return Boolean(
+        error
+        && (error.code === '42P01' || error.code === 'PGRST205')
+        && message.includes('tiktok_account_tokens')
+    );
 }
 
 export async function saveTikTokAccountFromToken(
@@ -33,7 +46,22 @@ export async function saveTikTokAccountFromToken(
         .select('id')
         .eq('user_id', userId)
         .eq('open_id', userInfo.open_id)
+        .eq('account_type', 'normal')
         .maybeSingle();
+
+    let tokenWriteFence: string | null = null;
+    if (existingAccount) {
+        const { data: tokenStorage, error: tokenStorageError } = await supabase
+            .from('tiktok_account_tokens')
+            .select('compatibility_write_key')
+            .eq('account_id', existingAccount.id)
+            .maybeSingle();
+
+        if (tokenStorageError && !isMissingTokenTableError(tokenStorageError)) {
+            throw new Error(`Failed to prepare secure account binding: ${tokenStorageError.message}`);
+        }
+        tokenWriteFence = tokenStorage?.compatibility_write_key || null;
+    }
 
     const payload = {
         display_name: userInfo.display_name || null,
@@ -47,6 +75,7 @@ export async function saveTikTokAccountFromToken(
         refresh_token: tokenResponse.refresh_token,
         access_token_expires_at: accessTokenExpiresAt.toISOString(),
         token_expires_at: refreshTokenExpiresAt.toISOString(),
+        ...(tokenWriteFence ? { token_write_fence: tokenWriteFence } : {}),
         scopes,
         status: 'active',
         updated_at: new Date().toISOString(),
@@ -86,8 +115,63 @@ export async function saveTikTokAccountFromToken(
         throw new Error(`Failed to save account: ${error.message}`);
     }
 
+    if (!inserted?.id) {
+        throw new Error('Failed to resolve saved TikTok account');
+    }
+
     return {
-        accountId: inserted?.id || null,
+        accountId: inserted.id,
+        userInfo,
+        accessTokenExpiresAt,
+        refreshTokenExpiresAt,
+    };
+}
+
+export async function commitTikTokAccountFromAuthState(
+    supabase: SupabaseClient<Database>,
+    input: {
+        state: string;
+        flowType: 'web' | 'qr';
+        userId: string;
+        processingToken: string;
+        tokenResponse: TikTokTokenResponse;
+    }
+): Promise<BoundTikTokAccountResult> {
+    const userInfo = await getUserInfo(input.tokenResponse.access_token);
+    const accessTokenExpiresAt = calculateTokenExpiration(input.tokenResponse.expires_in);
+    const refreshTokenExpiresAt = calculateTokenExpiration(input.tokenResponse.refresh_expires_in);
+    const scopes = splitScopes(input.tokenResponse.scope);
+
+    const { data: accountId, error } = await supabase.rpc('commit_tiktok_auth_account', {
+        p_state: input.state,
+        p_flow_type: input.flowType,
+        p_user_id: input.userId,
+        p_processing_token: input.processingToken,
+        p_open_id: userInfo.open_id,
+        p_union_id: userInfo.union_id || '',
+        p_display_name: userInfo.display_name || '',
+        p_username: userInfo.username || '',
+        p_avatar_url: userInfo.avatar_url || '',
+        p_follower_count: safeCount(userInfo.follower_count),
+        p_following_count: safeCount(userInfo.following_count),
+        p_likes_count: safeCount(userInfo.likes_count),
+        p_video_count: safeCount(userInfo.video_count),
+        p_access_token: input.tokenResponse.access_token,
+        p_refresh_token: input.tokenResponse.refresh_token,
+        p_access_token_expires_at: accessTokenExpiresAt.toISOString(),
+        p_refresh_token_expires_at: refreshTokenExpiresAt.toISOString(),
+        p_scopes: scopes,
+    });
+
+    if (error) {
+        throw new Error('Failed to atomically save TikTok authorization.');
+    }
+    if (!accountId) {
+        throw new Error('TikTok authorization state lease was lost before account commit.');
+    }
+
+    return {
+        accountId,
         userInfo,
         accessTokenExpiresAt,
         refreshTokenExpiresAt,

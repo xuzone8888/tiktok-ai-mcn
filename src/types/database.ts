@@ -308,8 +308,8 @@ export interface Database {
           account_id: string | null;
           external_content_id: string | null;
           external_comment_id: string | null;
-          action_type: "sync" | "reply" | "permission_error" | "token_error";
-          status: "running" | "sent" | "completed" | "failed" | "unsupported";
+          action_type: "sync" | "reply" | "permission_error" | "token_error" | "comment_auth_disconnect";
+          status: "running" | "sent" | "completed" | "failed" | "unsupported" | "unknown";
           idempotency_key: string | null;
           error_code: string | null;
           error_message: string | null;
@@ -324,8 +324,8 @@ export interface Database {
           account_id?: string | null;
           external_content_id?: string | null;
           external_comment_id?: string | null;
-          action_type: "sync" | "reply" | "permission_error" | "token_error";
-          status?: "running" | "sent" | "completed" | "failed" | "unsupported";
+          action_type: "sync" | "reply" | "permission_error" | "token_error" | "comment_auth_disconnect";
+          status?: "running" | "sent" | "completed" | "failed" | "unsupported" | "unknown";
           idempotency_key?: string | null;
           error_code?: string | null;
           error_message?: string | null;
@@ -340,8 +340,8 @@ export interface Database {
           account_id?: string | null;
           external_content_id?: string | null;
           external_comment_id?: string | null;
-          action_type?: "sync" | "reply" | "permission_error" | "token_error";
-          status?: "running" | "sent" | "completed" | "failed" | "unsupported";
+          action_type?: "sync" | "reply" | "permission_error" | "token_error" | "comment_auth_disconnect";
+          status?: "running" | "sent" | "completed" | "failed" | "unsupported" | "unknown";
           idempotency_key?: string | null;
           error_code?: string | null;
           error_message?: string | null;
@@ -958,6 +958,8 @@ export interface Database {
           creator_info_cached_at: string | null;
           scopes: Json;
           account_type: string;
+          token_write_fence: string | null;
+          business_comment_auth_generation: string;
           status: string;
           created_at: string;
           updated_at: string;
@@ -984,6 +986,8 @@ export interface Database {
           creator_info_cached_at?: string | null;
           scopes?: Json;
           account_type?: string;
+          token_write_fence?: string | null;
+          business_comment_auth_generation?: string;
           status?: string;
           username?: string | null;
         };
@@ -1006,6 +1010,8 @@ export interface Database {
           creator_info_cached_at?: string | null;
           scopes?: Json;
           account_type?: string;
+          token_write_fence?: string | null;
+          business_comment_auth_generation?: string;
           status?: string;
           username?: string | null;
         };
@@ -1020,6 +1026,202 @@ export interface Database {
             foreignKeyName: "tiktok_accounts_group_id_fkey";
             columns: ["group_id"];
             referencedRelation: "tiktok_account_groups";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      tiktok_account_tokens: {
+        Row: {
+          account_id: string;
+          access_token: string;
+          refresh_token: string;
+          access_token_expires_at: string | null;
+          refresh_token_expires_at: string | null;
+          refresh_lease_token: string | null;
+          refresh_lease_expires_at: string | null;
+          managed_writes_only: boolean;
+          compatibility_write_key: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          account_id: string;
+          access_token: string;
+          refresh_token: string;
+          access_token_expires_at?: string | null;
+          refresh_token_expires_at?: string | null;
+          refresh_lease_token?: string | null;
+          refresh_lease_expires_at?: string | null;
+          managed_writes_only?: boolean;
+          compatibility_write_key?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          access_token?: string;
+          refresh_token?: string;
+          access_token_expires_at?: string | null;
+          refresh_token_expires_at?: string | null;
+          refresh_lease_token?: string | null;
+          refresh_lease_expires_at?: string | null;
+          managed_writes_only?: boolean;
+          compatibility_write_key?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_account_tokens_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "tiktok_accounts";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      tiktok_business_auth_states: {
+        Row: {
+          id: string;
+          state: string;
+          user_id: string;
+          account_id: string;
+          account_generation: string;
+          status: string;
+          expires_at: string;
+          processing_token: string | null;
+          processing_expires_at: string | null;
+          completed_at: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          state: string;
+          user_id: string;
+          account_id: string;
+          status?: string;
+          account_generation?: string;
+          expires_at: string;
+          processing_token?: string | null;
+          processing_expires_at?: string | null;
+          completed_at?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+          account_generation?: string;
+          processing_token?: string | null;
+          processing_expires_at?: string | null;
+          completed_at?: string | null;
+          error_code?: string | null;
+          error_message?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_business_auth_states_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "tiktok_accounts";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      tiktok_business_account_tokens: {
+        Row: {
+          account_id: string;
+          business_open_id: string;
+          access_token: string;
+          refresh_token: string;
+          access_token_expires_at: string;
+          refresh_token_expires_at: string;
+          scopes: Json;
+          status: string;
+          credential_generation: string;
+          refresh_lease_token: string | null;
+          refresh_lease_expires_at: string | null;
+          revocation_token: string | null;
+          revocation_started_at: string | null;
+          revocation_lease_expires_at: string | null;
+          revocation_error_code: string | null;
+          revocation_error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          account_id: string;
+          business_open_id: string;
+          access_token: string;
+          refresh_token: string;
+          access_token_expires_at: string;
+          refresh_token_expires_at: string;
+          scopes?: Json;
+          status?: string;
+          credential_generation?: string;
+          refresh_lease_token?: string | null;
+          refresh_lease_expires_at?: string | null;
+          revocation_token?: string | null;
+          revocation_started_at?: string | null;
+          revocation_lease_expires_at?: string | null;
+          revocation_error_code?: string | null;
+          revocation_error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          business_open_id?: string;
+          access_token?: string;
+          refresh_token?: string;
+          access_token_expires_at?: string;
+          refresh_token_expires_at?: string;
+          scopes?: Json;
+          status?: string;
+          credential_generation?: string;
+          refresh_lease_token?: string | null;
+          refresh_lease_expires_at?: string | null;
+          revocation_token?: string | null;
+          revocation_started_at?: string | null;
+          revocation_lease_expires_at?: string | null;
+          revocation_error_code?: string | null;
+          revocation_error_message?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_business_account_tokens_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "tiktok_accounts";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
+      tiktok_business_api_rate_windows: {
+        Row: {
+          account_id: string;
+          endpoint: "comment.list" | "comment.reply.list";
+          window_started_at: string;
+          reserved_requests: number;
+          updated_at: string;
+        };
+        Insert: {
+          account_id: string;
+          endpoint: "comment.list" | "comment.reply.list";
+          window_started_at: string;
+          reserved_requests: number;
+          updated_at?: string;
+        };
+        Update: {
+          reserved_requests?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_business_api_rate_windows_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "tiktok_accounts";
             referencedColumns: ["id"];
           }
         ];
@@ -1085,6 +1287,12 @@ export interface Database {
           batch_interval_seconds?: number;
           status?: string;
           total_items?: number;
+          success_count?: number;
+          failed_count?: number;
+          published_count?: number;
+          pending_count?: number;
+          total_views?: number;
+          total_likes?: number;
           product_info?: Json | null;
         };
         Update: {
@@ -1164,6 +1372,11 @@ export interface Database {
           publish_init_started_at: string | null;
           last_status_check_at: string | null;
           publish_attempt_count: number;
+          tiktok_transfer_method: 'PULL_FROM_URL' | 'FILE_UPLOAD';
+          source_video_size_bytes: number | null;
+          source_video_mime_type: string | null;
+          tiktok_upload_outcome: 'accepted' | 'unknown' | 'rejected' | null;
+          tiktok_upload_reported_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1191,6 +1404,11 @@ export interface Database {
           publish_init_started_at?: string | null;
           last_status_check_at?: string | null;
           publish_attempt_count?: number;
+          tiktok_transfer_method?: 'PULL_FROM_URL' | 'FILE_UPLOAD';
+          source_video_size_bytes?: number | null;
+          source_video_mime_type?: string | null;
+          tiktok_upload_outcome?: 'accepted' | 'unknown' | 'rejected' | null;
+          tiktok_upload_reported_at?: string | null;
         };
         Update: {
           account_id?: string;
@@ -1222,6 +1440,11 @@ export interface Database {
           publish_init_started_at?: string | null;
           last_status_check_at?: string | null;
           publish_attempt_count?: number;
+          tiktok_transfer_method?: 'PULL_FROM_URL' | 'FILE_UPLOAD';
+          source_video_size_bytes?: number | null;
+          source_video_mime_type?: string | null;
+          tiktok_upload_outcome?: 'accepted' | 'unknown' | 'rejected' | null;
+          tiktok_upload_reported_at?: string | null;
         };
         Relationships: [
           {
@@ -1297,6 +1520,8 @@ export interface Database {
           completed_at: string | null;
           error_code: string | null;
           error_message: string | null;
+          processing_token: string | null;
+          processing_expires_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -1315,6 +1540,8 @@ export interface Database {
           completed_at?: string | null;
           error_code?: string | null;
           error_message?: string | null;
+          processing_token?: string | null;
+          processing_expires_at?: string | null;
         };
         Update: {
           state?: string;
@@ -1331,6 +1558,8 @@ export interface Database {
           completed_at?: string | null;
           error_code?: string | null;
           error_message?: string | null;
+          processing_token?: string | null;
+          processing_expires_at?: string | null;
         };
         Relationships: [
           {
@@ -1799,6 +2028,269 @@ export interface Database {
       expire_contracts: {
         Args: Record<string, never>;
         Returns: number;
+      };
+      claim_tiktok_business_api_budget: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_endpoint: string;
+          p_requested_requests: number;
+          p_window_limit: number;
+        };
+        Returns: boolean;
+      };
+      begin_tiktok_business_token_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+          p_action_log_id: string;
+          p_lease_seconds?: number;
+          p_manual_confirmation?: boolean;
+        };
+        Returns: {
+          access_token: string;
+          business_open_id: string;
+          previous_error_code: string | null;
+        }[];
+      };
+      complete_tiktok_business_token_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+          p_action_log_id: string;
+        };
+        Returns: boolean;
+      };
+      defer_tiktok_business_token_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+          p_action_log_id: string;
+          p_error_code: string;
+          p_error_message: string;
+        };
+        Returns: boolean;
+      };
+      claim_tiktok_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_expected_refresh_token: string;
+          p_lease_token: string;
+          p_lease_seconds?: number;
+        };
+        Returns: boolean;
+      };
+      claim_tiktok_auth_state: {
+        Args: {
+          p_state: string;
+          p_flow_type: string;
+          p_user_id: string | null;
+          p_processing_token: string;
+          p_lease_seconds: number;
+        };
+        Returns: {
+          user_id: string;
+          code_verifier: string | null;
+          client_ticket: string | null;
+          qr_token: string | null;
+          expires_at: string;
+        }[];
+      };
+      complete_tiktok_auth_state: {
+        Args: {
+          p_state: string;
+          p_flow_type: string;
+          p_user_id: string | null;
+          p_processing_token: string;
+        };
+        Returns: boolean;
+      };
+      fail_tiktok_auth_state: {
+        Args: {
+          p_state: string;
+          p_flow_type: string;
+          p_user_id: string | null;
+          p_processing_token: string;
+          p_error_code: string;
+          p_error_message: string;
+        };
+        Returns: boolean;
+      };
+      expire_tiktok_auth_state: {
+        Args: {
+          p_state: string;
+          p_flow_type: string;
+          p_user_id: string | null;
+        };
+        Returns: boolean;
+      };
+      commit_tiktok_auth_account: {
+        Args: {
+          p_state: string;
+          p_flow_type: string;
+          p_user_id: string;
+          p_processing_token: string;
+          p_open_id: string;
+          p_union_id: string;
+          p_display_name: string;
+          p_username: string;
+          p_avatar_url: string;
+          p_follower_count: number;
+          p_following_count: number;
+          p_likes_count: number;
+          p_video_count: number;
+          p_access_token: string;
+          p_refresh_token: string;
+          p_access_token_expires_at: string;
+          p_refresh_token_expires_at: string;
+          p_scopes: Json;
+        };
+        Returns: string | null;
+      };
+      release_tiktok_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_lease_token: string;
+        };
+        Returns: boolean;
+      };
+      commit_tiktok_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_expected_refresh_token: string;
+          p_lease_token: string;
+          p_access_token: string;
+          p_refresh_token: string;
+          p_access_token_expires_at: string;
+          p_refresh_token_expires_at: string;
+          p_updated_at: string;
+        };
+        Returns: boolean;
+      };
+      claim_tiktok_business_auth_state: {
+        Args: {
+          p_state: string;
+          p_processing_token: string;
+          p_lease_seconds?: number;
+        };
+        Returns: {
+          user_id: string;
+          account_id: string;
+        }[];
+      };
+      complete_tiktok_business_auth_state: {
+        Args: {
+          p_state: string;
+          p_processing_token: string;
+          p_business_open_id: string;
+          p_access_token: string;
+          p_refresh_token: string;
+          p_access_token_expires_at: string;
+          p_refresh_token_expires_at: string;
+          p_scopes: Json;
+        };
+        Returns: boolean;
+      };
+      fail_tiktok_business_auth_state: {
+        Args: {
+          p_state: string;
+          p_processing_token: string;
+          p_error_code: string;
+          p_error_message: string;
+        };
+        Returns: boolean;
+      };
+      claim_tiktok_business_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_expected_credential_generation: string;
+          p_refresh_lease_token: string;
+          p_lease_seconds?: number;
+        };
+        Returns: boolean;
+      };
+      commit_tiktok_business_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_expected_credential_generation: string;
+          p_refresh_lease_token: string;
+          p_business_open_id: string;
+          p_access_token: string;
+          p_refresh_token: string;
+          p_access_token_expires_at: string;
+          p_refresh_token_expires_at: string;
+          p_scopes: Json;
+        };
+        Returns: boolean;
+      };
+      release_tiktok_business_token_refresh: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_refresh_lease_token: string;
+        };
+        Returns: boolean;
+      };
+      apply_tiktok_task_video_stats: {
+        Args: {
+          p_task_id: string;
+          p_user_id: string;
+          p_updates?: Json;
+        };
+        Returns: Json;
+      };
+      finalize_social_comment_reply: {
+        Args: {
+          p_user_id: string;
+          p_action_log_id: string;
+          p_reply_attempt_token: string;
+          p_parent_external_comment_id: string;
+          p_task_item_id: string | null;
+          p_reply: Json;
+        };
+        Returns: Database["public"]["Tables"]["social_comments"]["Row"];
+      };
+      abandon_stale_tiktok_reply_dispatch: {
+        Args: {
+          p_user_id: string;
+          p_action_log_id: string;
+          p_reply_attempt_token: string;
+        };
+        Returns: boolean;
+      };
+      mark_tiktok_reply_dispatch_started: {
+        Args: {
+          p_user_id: string;
+          p_action_log_id: string;
+          p_reply_attempt_token: string;
+        };
+        Returns: boolean;
+      };
+      transition_tiktok_reply_action: {
+        Args: {
+          p_user_id: string;
+          p_action_log_id: string;
+          p_reply_attempt_token: string;
+          p_from_statuses: string[];
+          p_to_status: string;
+          p_error_code: string | null;
+          p_error_message: string | null;
+          p_metadata: Json;
+        };
+        Returns: boolean;
+      };
+      mark_stale_tiktok_reply_dispatch_unknown: {
+        Args: {
+          p_user_id: string;
+          p_action_log_id: string;
+          p_reply_attempt_token: string;
+        };
+        Returns: boolean;
       };
       create_tiktok_account_group: {
         Args: {

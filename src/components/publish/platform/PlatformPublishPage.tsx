@@ -1169,7 +1169,13 @@ export function PlatformPublishPage({
 
         const credentialsData = await credentialsResponse.json().catch(() => null)
         if (!credentialsResponse.ok || !credentialsData?.success || !credentialsData?.data?.uploadUrl || !credentialsData?.data?.publicUrl) {
-          throw new Error(localizeApiMessage(credentialsData?.error, isEnglish, 'Unable to get upload credentials') || uiText(isEnglish, '获取上传凭证失败', 'Unable to get upload credentials'))
+          throw new Error(
+            credentialsResponse.status === 401
+              ? uiText(isEnglish, '登录状态已失效，请重新登录后上传', 'Your session expired. Sign in again to upload.')
+              : credentialsResponse.status === 400
+                ? uiText(isEnglish, '文件参数或格式不受支持', 'The file parameters or format are not supported.')
+                : uiText(isEnglish, '暂时无法获取上传凭证', 'Upload authorization is temporarily unavailable.')
+          )
         }
 
         await putFileToOss(
@@ -1214,7 +1220,9 @@ export function PlatformPublishPage({
     if (uploadResults.some((video) => video !== null)) {
       setSelectedVideos((current) => commitUploadResults(current, uploadResults, MAX_VIDEOS))
     }
-    setTimeout(() => setUploadingFiles([]), 2000)
+    if (uploadResults.every((video) => video !== null)) {
+      setTimeout(() => setUploadingFiles([]), 2000)
+    }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -1754,7 +1762,7 @@ export function PlatformPublishPage({
         {[
           {
             id: 'create' as TabType,
-            label: isEnglish ? 'Video Publishing' : '视频发布',
+            label: isEnglish ? 'Create Post' : '创建发布',
             icon: Send,
           },
           {
@@ -1907,6 +1915,8 @@ export function PlatformPublishPage({
                     <div className="rounded-full bg-cyan-500/10 p-2">
                       {uploadingFiles.every((file) => file.status === 'done') ? (
                         <CheckCircle2 className="h-5 w-5 text-cyan-400" />
+                      ) : uploadingFiles.some((file) => file.status === 'error') ? (
+                        <AlertCircle className="h-5 w-5 text-red-400" />
                       ) : (
                         <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
                       )}
@@ -1964,7 +1974,34 @@ export function PlatformPublishPage({
                             {file.status === 'done' ? uiText(isEnglish, '完成', 'Completed') : file.status === 'error' ? uiText(isEnglish, '失败', 'Failed') : `${file.progress}%`}
                           </span>
                         </div>
+                        {file.status === 'error' && file.error && (
+                          <p className="mt-1 break-words text-[11px] leading-4 text-red-300">
+                            {file.error}
+                          </p>
+                        )}
                       </div>
+                      {file.status === 'error' && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadingFiles((current) => current.filter((item) => item.id !== file.id))
+                              fileInputRef.current?.click()
+                            }}
+                            className="rounded px-2 py-1 text-[11px] text-cyan-300 hover:bg-cyan-500/10"
+                          >
+                            {uiText(isEnglish, '重新选择', 'Select again')}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={uiText(isEnglish, `关闭 ${file.name} 上传错误`, `Dismiss upload error for ${file.name}`)}
+                            onClick={() => setUploadingFiles((current) => current.filter((item) => item.id !== file.id))}
+                            className="rounded p-1 text-gray-500 hover:bg-white/10 hover:text-white"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
