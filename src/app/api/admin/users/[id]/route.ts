@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         // 鉴权：验证管理员身份
@@ -16,7 +16,7 @@ export async function GET(
         if (auth.error) return auth.error;
 
         const supabase = createAdminClient();
-        const userId = params.id;
+        const { id: userId } = await params;
 
         // 1. Get user profile
         const { data: profile, error: profileError } = await supabase

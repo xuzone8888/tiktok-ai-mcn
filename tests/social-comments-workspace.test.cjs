@@ -15,6 +15,11 @@ const youtubeClient = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-pu
 const youtubeCommentsPage = fs.readFileSync(path.join(root, 'src/app/(main)/youtube-publish/comments/page.tsx'), 'utf8')
 const facebookCommentsPage = fs.readFileSync(path.join(root, 'src/app/(main)/facebook-publish/comments/page.tsx'), 'utf8')
 const accountsRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/accounts/route.ts'), 'utf8')
+const commentsRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/route.ts'), 'utf8')
+const contentRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/content/route.ts'), 'utf8')
+const replyRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/[id]/reply/route.ts'), 'utf8')
+const syncRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/sync/route.ts'), 'utf8')
+const translationsRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/translations/route.ts'), 'utf8')
 const facebookBootstrapRoute = fs.readFileSync(path.join(root, 'src/app/api/social-comments/facebook-bootstrap/route.ts'), 'utf8')
 const platformPublishPage = fs.readFileSync(path.join(root, 'src/components/publish/platform/PlatformPublishPage.tsx'), 'utf8')
 const guardSource = fs.readFileSync(path.join(root, 'src/components/social-comments/workspace-request-guard.ts'), 'utf8')
@@ -127,15 +132,32 @@ test('reply controls live in the comment list while detail stays display-only', 
   assert.doesNotMatch(client, /selectedComment\.direction === "inbound" \? <div className="grid gap-2/)
 })
 
-test('batch replies select replyable comments and send one message sequentially', () => {
+test('batch replies remain sequential and exclude TikTok from every batch target path', () => {
   assert.match(client, /const \[selectedReplyIds, setSelectedReplyIds\]/)
-  assert.match(client, /const targets = inboxComments\.filter/)
+  assert.match(client, /batchReplyableInboxComments = replyableInboxComments\.filter/)
+  assert.match(client, /comment\.platform !== "tiktok"/)
+  assert.match(client, /const targets = inboxComments\.filter[\s\S]*comment\.platform !== "tiktok"/)
   assert.match(client, /for \(const comment of targets\)/)
   assert.match(client, /await postReply\(comment, message, attempt\.idempotencyKey\)/)
   assert.match(client, /crypto\.subtle\.digest\("SHA-256"/)
   assert.match(client, /window\.localStorage\.setItem\(storageKey, idempotencyKey\)/)
   assert.match(client, /successfulIds\.add\(comment\.id\)/)
-  assert.match(client, /setSelectedReplyIds\(allReplyableSelected \? new Set\(\)/)
+  assert.match(client, /new Set\(batchReplyableInboxComments\.map\(\(comment\) => comment\.id\)\)/)
+  assert.match(client, /\{canBatchReply \? \([\s\S]*?<Checkbox[\s\S]*disabled=\{batchReplying\}/)
+  assert.doesNotMatch(client, /disabled=\{!canBatchReply \|\| batchReplying\}/)
+})
+
+test('comment APIs do not return or log unexpected internal error messages', () => {
+  for (const route of [commentsRoute, contentRoute, accountsRoute, facebookBootstrapRoute]) {
+    assert.match(route, /getApiMessage\('internal_error', 'Server error', lang\)/)
+    assert.doesNotMatch(route, /console\.error\([^\n]*, error\)/)
+  }
+  for (const route of [replyRoute, syncRoute]) {
+    assert.match(route, /code: mapped\.code/)
+    assert.doesNotMatch(route, /console\.error\([^\n]*, error\)/)
+  }
+  assert.match(translationsRoute, /const publicMessage = unavailable \? message : 'Comment translation failed\.'/)
+  assert.doesNotMatch(translationsRoute, /console\.error\([^\n]*message/)
 })
 
 test('YouTube comment surfaces sync recent content once when opened', () => {

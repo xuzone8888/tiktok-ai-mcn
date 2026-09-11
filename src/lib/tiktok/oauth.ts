@@ -45,6 +45,19 @@ export class TikTokOAuthError extends Error {
     }
 }
 
+export function getTikTokRevocationWriteOutcome(
+    error: unknown
+): 'unknown' | 'rejected' | null {
+    if (error instanceof TikTokOAuthError && error.operation === 'revoke') {
+        return error.httpStatus !== null && (error.httpStatus < 200 || error.httpStatus >= 300)
+            ? 'rejected'
+            : 'unknown';
+    }
+    // A transport exception can occur after TikTok accepted the request, so
+    // the remote write outcome must be treated as unknown rather than retried.
+    return error instanceof Error ? 'unknown' : null;
+}
+
 export function isTikTokRefreshCredentialInvalid(error: unknown): boolean {
     return error instanceof TikTokOAuthError
         && error.operation === 'refresh'
@@ -308,12 +321,29 @@ export async function getUserInfo(accessToken: string): Promise<TikTokUserInfo> 
     const errorEnvelope = asRecord(payload.error);
     const user = asRecord(asRecord(payload.data)?.user);
     const openId = nonBlankString(user?.open_id);
+    const optionalStringsValid = [
+        user?.union_id,
+        user?.avatar_url,
+        user?.avatar_url_100,
+        user?.display_name,
+        user?.username,
+    ].every((value) => value === undefined || typeof value === 'string');
+    const optionalCountsValid = [
+        user?.follower_count,
+        user?.following_count,
+        user?.likes_count,
+        user?.video_count,
+    ].every((value) => (
+        value === undefined
+        || (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+    ));
     if (
         !errorEnvelope
         || errorEnvelope.code !== 'ok'
         || !user
         || !openId
-        || (user.display_name !== undefined && typeof user.display_name !== 'string')
+        || !optionalStringsValid
+        || !optionalCountsValid
     ) {
         throw new TikTokOAuthError({
             operation: 'user_info',

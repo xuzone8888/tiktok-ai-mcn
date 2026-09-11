@@ -26,12 +26,15 @@ interface PublishedItem {
         open_id: string;
         user_id: string;
         account_type: string;
+        status: string;
         scopes: unknown;
     } | null;
 }
 
 interface TikTokStatsUpdate extends Record<string, string | number> {
     item_id: string;
+    account_id: string;
+    tiktok_video_id: string;
     view_count: number;
     like_count: number;
     comment_count: number;
@@ -44,7 +47,7 @@ function accountLabel(account: PublishedItem['account']) {
 
 // POST - Safely refresh statistics for the task's published TikTok videos.
 export async function POST(_request: NextRequest, { params }: RouteParams) {
-    if (process.env.ENABLE_VIDEO_STATS_SYNC === 'false') {
+    if (process.env.ENABLE_VIDEO_STATS_SYNC !== 'true') {
         return NextResponse.json(
             { error: '视频数据同步功能当前已禁用（审核模式）', disabled: true },
             { status: 503 }
@@ -72,6 +75,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
                         open_id,
                         user_id,
                         account_type,
+                        status,
                         scopes
                     )
                 )
@@ -103,6 +107,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
                 || account.user_id !== user.id
                 || account.user_id !== task.user_id
                 || account.account_type !== 'normal'
+                || account.status !== 'active'
             ) {
                 errors.push(`视频 ${item.tiktok_video_id} 的账号归属无效`);
                 continue;
@@ -154,6 +159,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
                         for (const item of matchingItems) {
                             successfulUpdates.set(item.id, {
                                 item_id: item.id,
+                                account_id: account.id,
+                                tiktok_video_id: item.tiktok_video_id,
                                 view_count: video.view_count,
                                 like_count: video.like_count,
                                 comment_count: video.comment_count,
@@ -210,8 +217,8 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
             total_likes: totalLikes,
             errors: errors.length > 0 ? errors : undefined,
         });
-    } catch (error) {
-        console.error('Error syncing video stats:', error);
+    } catch {
+        console.error('TikTok video stats sync failed unexpectedly');
         return NextResponse.json({ error: '服务器错误' }, { status: 500 });
     }
 }

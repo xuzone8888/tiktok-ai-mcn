@@ -11,12 +11,26 @@ import {
 import { exchangeCodeForToken } from '@/lib/tiktok/oauth';
 import { buildTikTokAccountsUrl } from '@/lib/tiktok/routes';
 
+const SAFE_CALLBACK_FAILURE = 'TikTok authorization failed. Please try again.';
+
+function normalizeProviderErrorCode(value: string): string {
+    const normalized = value.trim().toLowerCase();
+    return /^[a-z0-9_.-]{1,80}$/.test(normalized)
+        ? normalized
+        : 'authorization_denied';
+}
+
+function safeProviderErrorMessage(code: string): string {
+    return code === 'access_denied'
+        ? 'TikTok authorization was cancelled.'
+        : SAFE_CALLBACK_FAILURE;
+}
+
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     const oauthError = searchParams.get('error');
-    const errorDescription = searchParams.get('error_description');
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
 
     if ((!code && !oauthError) || !state) {
@@ -51,18 +65,20 @@ export async function GET(request: NextRequest) {
         claimed = true;
 
         if (oauthError) {
+            const safeErrorCode = normalizeProviderErrorCode(oauthError);
+            const safeErrorMessage = safeProviderErrorMessage(safeErrorCode);
             const failed = await failTikTokAuthState(supabase, {
                 state,
                 flowType: 'web',
                 userId: null,
                 processingToken,
-                errorCode: oauthError,
-                errorMessage: errorDescription || oauthError,
+                errorCode: safeErrorCode,
+                errorMessage: safeErrorMessage,
             });
             return NextResponse.redirect(
                 buildTikTokAccountsUrl(baseUrl, {
                     error: failed
-                        ? (errorDescription || oauthError)
+                        ? safeErrorMessage
                         : 'Authorization state was already finalized',
                 })
             );
@@ -91,7 +107,10 @@ export async function GET(request: NextRequest) {
             })
         );
     } catch (error) {
-        console.error('TikTok callback error:', error);
+        console.error(
+            'TikTok callback failed:',
+            error instanceof Error ? error.name : 'UnknownError'
+        );
         if (claimed) {
             try {
                 await failTikTokAuthState(supabase, {
@@ -100,7 +119,7 @@ export async function GET(request: NextRequest) {
                     userId: null,
                     processingToken,
                     errorCode: 'callback_failed',
-                    errorMessage: error instanceof Error ? error.message : 'Authorization failed',
+                    errorMessage: SAFE_CALLBACK_FAILURE,
                 });
             } catch (updateError) {
                 console.warn('Failed to persist TikTok callback error:', updateError);
@@ -109,7 +128,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.redirect(
             buildTikTokAccountsUrl(baseUrl, {
-                error: error instanceof Error ? error.message : 'Authorization failed',
+                error: SAFE_CALLBACK_FAILURE,
             })
         );
     }

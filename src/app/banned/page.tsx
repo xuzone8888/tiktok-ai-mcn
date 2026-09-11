@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { ShieldX, Mail, LogOut } from "lucide-react";
 import Link from "next/link";
+import { APP_BRAND } from "@/config/brand";
 
 export default function BannedPage() {
   return (
@@ -31,7 +32,7 @@ export default function BannedPage() {
             asChild
             className="w-full bg-gradient-to-r from-tiktok-cyan to-blue-500 text-black font-semibold"
           >
-            <a href="mailto:support@mcn.ai">
+            <a href={`mailto:${APP_BRAND.contactEmail}`}>
               <Mail className="h-4 w-4 mr-2" />
               联系客服申诉
             </a>
@@ -52,8 +53,8 @@ export default function BannedPage() {
         {/* 底部说明 */}
         <p className="text-xs text-muted-foreground mt-8">
           如需帮助，请发送邮件至{" "}
-          <a href="mailto:support@mcn.ai" className="text-tiktok-cyan hover:underline">
-            support@mcn.ai
+          <a href={`mailto:${APP_BRAND.contactEmail}`} className="text-tiktok-cyan hover:underline">
+            {APP_BRAND.contactEmail}
           </a>
         </p>
       </div>

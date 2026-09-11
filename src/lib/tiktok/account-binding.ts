@@ -11,8 +11,27 @@ export interface BoundTikTokAccountResult {
     refreshTokenExpiresAt: Date;
 }
 
-function safeCount(value: number | undefined): number {
-    return Number.isSafeInteger(value) && (value ?? -1) >= 0 ? value as number : 0;
+export function safeTikTokCount(value: number | undefined): number {
+    return validTikTokCount(value) ?? 0;
+}
+
+export function validTikTokCount(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : undefined;
+}
+
+export function buildTikTokCountPatch(userInfo: TikTokUserInfo) {
+    const followerCount = validTikTokCount(userInfo.follower_count);
+    const followingCount = validTikTokCount(userInfo.following_count);
+    const likesCount = validTikTokCount(userInfo.likes_count);
+    const videoCount = validTikTokCount(userInfo.video_count);
+    return {
+        ...(followerCount !== undefined ? { follower_count: followerCount } : {}),
+        ...(followingCount !== undefined ? { following_count: followingCount } : {}),
+        ...(likesCount !== undefined ? { likes_count: likesCount } : {}),
+        ...(videoCount !== undefined ? { video_count: videoCount } : {}),
+    };
 }
 
 function splitScopes(scope: string | null | undefined) {
@@ -67,10 +86,10 @@ export async function saveTikTokAccountFromToken(
         display_name: userInfo.display_name || null,
         username: userInfo.username || null,
         avatar_url: userInfo.avatar_url || null,
-        follower_count: userInfo.follower_count || 0,
-        following_count: userInfo.following_count || 0,
-        likes_count: userInfo.likes_count || 0,
-        video_count: userInfo.video_count || 0,
+        follower_count: safeTikTokCount(userInfo.follower_count),
+        following_count: safeTikTokCount(userInfo.following_count),
+        likes_count: safeTikTokCount(userInfo.likes_count),
+        video_count: safeTikTokCount(userInfo.video_count),
         access_token: tokenResponse.access_token,
         refresh_token: tokenResponse.refresh_token,
         access_token_expires_at: accessTokenExpiresAt.toISOString(),
@@ -152,10 +171,10 @@ export async function commitTikTokAccountFromAuthState(
         p_display_name: userInfo.display_name || '',
         p_username: userInfo.username || '',
         p_avatar_url: userInfo.avatar_url || '',
-        p_follower_count: safeCount(userInfo.follower_count),
-        p_following_count: safeCount(userInfo.following_count),
-        p_likes_count: safeCount(userInfo.likes_count),
-        p_video_count: safeCount(userInfo.video_count),
+        p_follower_count: safeTikTokCount(userInfo.follower_count),
+        p_following_count: safeTikTokCount(userInfo.following_count),
+        p_likes_count: safeTikTokCount(userInfo.likes_count),
+        p_video_count: safeTikTokCount(userInfo.video_count),
         p_access_token: input.tokenResponse.access_token,
         p_refresh_token: input.tokenResponse.refresh_token,
         p_access_token_expires_at: accessTokenExpiresAt.toISOString(),

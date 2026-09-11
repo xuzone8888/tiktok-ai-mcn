@@ -274,6 +274,59 @@ test('foreign or Shop account fails before token RPC and provider revoke', async
   assert.equal(providerCalls, 0)
 })
 
+test('Business disconnect refuses to race an unresolved TikTok reply before provider revocation', async () => {
+  let providerCalls = 0
+  const route = loadDisconnectRoute({
+    rpc: async (name) => {
+      assert.equal(name, 'begin_tiktok_business_token_revocation')
+      return {
+        data: null,
+        error: { code: '55000', message: 'comment_reply_in_progress' },
+      }
+    },
+    revoke: async () => { providerCalls += 1 },
+  })
+
+  const response = await route.DELETE({ json: async () => ({ accountId: 'account-1' }) })
+  assert.equal(response.status, 409)
+  assert.equal(response.body.code, 'comment_reply_in_progress')
+  assert.equal(providerCalls, 0)
+})
+
+test('pending account migration fences Business revocation against unresolved TikTok replies', () => {
+  const sql = fs.readFileSync(
+    'supabase/migrations/20260909_tiktok_account_disconnect_hardening.sql',
+    'utf8',
+  )
+  assert.match(sql, /guard_tiktok_business_revocation_during_reply/)
+  assert.match(sql, /NEW\.status = 'revocation_pending'/)
+  assert.match(sql, /OLD\.reply_dispatch_lease_expires_at > clock_timestamp\(\)/)
+  assert.match(sql, /action\.action_type = 'reply'/)
+  assert.match(sql, /action\.status IN \('running', 'sent', 'unknown'\)/)
+  assert.match(sql, /RAISE EXCEPTION 'comment_reply_in_progress'/)
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.guard_tiktok_business_revocation_during_reply\(\)[\s\S]+FROM PUBLIC, anon, authenticated/)
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.mark_tiktok_reply_dispatch_started[\s\S]+token\.status = 'active'/)
+  assert.match(sql, /reply_dispatch_lease_token = p_reply_attempt_token/)
+  assert.match(sql, /CREATE TRIGGER clear_tiktok_business_reply_dispatch_lease/)
+  assert.match(sql, /token\.reply_dispatch_lease_token::TEXT = OLD\.metadata->>'reply_attempt_token'/)
+  const databaseTypes = fs.readFileSync('src/types/database.ts', 'utf8')
+  assert.match(databaseTypes, /reply_dispatch_lease_token: string \| null/)
+  assert.match(databaseTypes, /reply_dispatch_lease_expires_at: string \| null/)
+})
+
+test('Business authorization URL failures never expose database or configuration error text', () => {
+  const route = fs.readFileSync(
+    'src/app/api/tiktok/business-auth/url/route.ts',
+    'utf8',
+  )
+  assert.match(route, /error\.message\.startsWith\('TikTok Business OAuth configuration is incomplete\.'\)/)
+  assert.match(route, /\? 'TikTok Business OAuth configuration is incomplete\.'/)
+  assert.match(route, /: '无法生成 TikTok 评论授权链接'/)
+  assert.doesNotMatch(route, /\{ error: error instanceof Error \? error\.message/)
+  assert.doesNotMatch(route, /Failed to store state:', stateError\.message/)
+  assert.doesNotMatch(route, /pendingCleanupError\?\.message/)
+})
+
 test('Business comment controls migration fences revoke, rate budget, audit, and permissions', () => {
   const sql = fs.readFileSync(
     'supabase/migrations/20260808_tiktok_business_comment_controls.sql',

@@ -36,6 +36,15 @@ function isMissingBusinessTokenTable(error: { code?: string; message?: string } 
     );
 }
 
+function isMissingPublishingDisconnectMigration(error: { code?: string; message?: string } | null) {
+    const message = error?.message?.toLowerCase() || '';
+    return Boolean(
+        error
+        && (error.code === '42703' || error.code === 'PGRST204')
+        && message.includes('revocation_status')
+    );
+}
+
 function getCommentAuthorizationStatus(
     authorization: {
         status: string;
@@ -107,12 +116,24 @@ export async function GET() {
 
         const admin = createAdminClient();
         const accountIds = accounts.map((account) => account.id);
-        const { data: businessTokens, error: businessTokenError } = accountIds.length > 0
-            ? await admin
-                .from('tiktok_business_account_tokens')
-                .select('account_id, access_token_expires_at, refresh_token_expires_at, scopes, status')
-                .in('account_id', accountIds)
-            : { data: [], error: null };
+        const [
+            { data: businessTokens, error: businessTokenError },
+            { data: publishingTokens, error: publishingTokenError },
+        ] = accountIds.length > 0
+            ? await Promise.all([
+                admin
+                    .from('tiktok_business_account_tokens')
+                    .select('account_id, access_token_expires_at, refresh_token_expires_at, scopes, status')
+                    .in('account_id', accountIds),
+                admin
+                    .from('tiktok_account_tokens')
+                    .select('account_id, revocation_status')
+                    .in('account_id', accountIds),
+            ])
+            : [
+                { data: [], error: null },
+                { data: [], error: null },
+            ];
 
         if (businessTokenError && !isMissingBusinessTokenTable(businessTokenError)) {
             console.error('Error fetching TikTok Business authorization status:', businessTokenError);
@@ -121,14 +142,33 @@ export async function GET() {
                 { status: 500 }
             );
         }
+        if (
+            publishingTokenError
+            && !isMissingPublishingDisconnectMigration(publishingTokenError)
+        ) {
+            console.error('Error fetching TikTok publishing authorization status:', publishingTokenError);
+            return NextResponse.json(
+                { error: 'Failed to fetch publishing authorization status' },
+                { status: 500 }
+            );
+        }
 
         const businessAuthorizationByAccount = new Map(
             (businessTokens || []).map((token) => [token.account_id, token])
         );
+        const publishingAuthorizationByAccount = new Map(
+            (publishingTokens || []).map((token) => [token.account_id, token])
+        );
         const groupNameById = new Map((groupsData || []).map((group) => [group.id, group.name]));
 
         // Remove sensitive data before returning
-        const safeAccounts = accounts.map(account => {
+        const safeAccounts = accounts.flatMap(account => {
+            const publishingAuthorization = publishingAuthorizationByAccount.get(account.id);
+            const disconnecting = account.status === 'revoked'
+                && publishingAuthorization?.revocation_status === 'revocation_pending';
+            // A revoked parent without a secure token is a completed tombstone
+            // retained only for task history and future same-identity rebind.
+            if (account.status === 'revoked' && !disconnecting) return [];
             const businessAuthorization = businessAuthorizationByAccount.get(account.id);
             const commentScopes = Array.isArray(businessAuthorization?.scopes)
                 ? businessAuthorization.scopes.filter((scope): scope is string => typeof scope === 'string')
@@ -141,7 +181,7 @@ export async function GET() {
                 hasCommentScopes
             );
 
-            return {
+            return [{
                 id: account.id,
                 open_id: account.open_id,
                 username: account.username,  // Include the TikTok @handle
@@ -163,7 +203,8 @@ export async function GET() {
                 comment_scopes: commentScopes,
                 comment_access_token_expires_at: businessAuthorization?.access_token_expires_at || null,
                 comment_refresh_token_expires_at: businessAuthorization?.refresh_token_expires_at || null,
-            };
+                disconnect_status: disconnecting ? 'pending' : 'none',
+            }];
         });
 
         return NextResponse.json({ accounts: safeAccounts });

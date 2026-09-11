@@ -43,6 +43,11 @@ export default function ContactPage() {
                             ? "Whether it's business partnerships, technical support, or general questions, we're here to help."
                             : "无论是商务合作、技术支持还是一般咨询，我们随时为您提供帮助"}
                     </p>
+                    <p className="-mt-10 mb-12 text-center text-sm text-gray-400">
+                        {lang === "en"
+                            ? "Star Gaze is operated by Wuhan Guanxing Cultural Media Co., Ltd. The official website is toryxai.com."
+                            : "Star Gaze 由武汉观星文化传媒有限公司运营，官方网站为 toryxai.com。"}
+                    </p>
 
                     <div className="grid md:grid-cols-2 gap-6">
                         {/* 商务合作 */}
@@ -55,11 +60,11 @@ export default function ContactPage() {
                             <div className="space-y-4">
                                 <div>
                                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{lang === "en" ? "Business Inquiries" : "商务合作"}</div>
-                                    <div className="text-lg font-mono text-white select-all">toryxai@outlook.com</div>
+                                    <div className="text-lg font-mono text-white select-all">developer@toryxai.com</div>
                                 </div>
                                 <div>
                                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{lang === "en" ? "Customer Support" : "客户支持"}</div>
-                                    <div className="text-lg font-mono text-white select-all">toryxai@outlook.com</div>
+                                    <div className="text-lg font-mono text-white select-all">developer@toryxai.com</div>
                                 </div>
                             </div>
                         </div>

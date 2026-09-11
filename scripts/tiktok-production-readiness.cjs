@@ -390,6 +390,7 @@ function auditTikTokProductionReadiness(env, role = 'app') {
   for (const name of [
     'TIKTOK_VIDEO_LIST_SCOPE_ENABLED',
     'NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED',
+    'ENABLE_VIDEO_STATS_SYNC',
   ]) {
     const configured = Object.prototype.hasOwnProperty.call(env, name)
     const value = configured ? env[name] : undefined
@@ -400,11 +401,15 @@ function auditTikTokProductionReadiness(env, role = 'app') {
   }
   const videoListScopeEnabled = rolloutFlags.TIKTOK_VIDEO_LIST_SCOPE_ENABLED
   const videoListUiEnabled = rolloutFlags.NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED
+  const videoStatsSyncEnabled = rolloutFlags.ENABLE_VIDEO_STATS_SYNC
   if (videoListScopeEnabled !== videoListUiEnabled) {
     errors.push('TikTok video-list UI and OAuth scope gates must be enabled or disabled together.')
   }
   if (videoListScopeEnabled) {
     warnings.push('Confirm the TikTok app revision with video.list is Live before enabling the Production video-list gates.')
+  }
+  if (videoStatsSyncEnabled && !videoListScopeEnabled) {
+    errors.push('TikTok video stats sync requires the video.list OAuth scope and UI rollout gates.')
   }
 
   const apiEnabled = enabled(env.SOCIAL_COMMENTS_API_ENABLED)
@@ -479,11 +484,12 @@ function auditTikTokProductionReadiness(env, role = 'app') {
     warnings.push('NEXT_PUBLIC_* flags are build-time values; rebuild the application after changing them.')
   }
   if (role === 'app') {
-    warnings.push('Confirm migrations 20260723 through 20260908 and PostgREST schema cache are ready before deploying this application build.')
+    warnings.push('Confirm migrations 20260723 through 20260911 are applied in order, including both 20260909 hardening migrations and 20260911 user deletion, and confirm the PostgREST schema cache is ready before deploying this application build.')
   }
 
   checks.push('Legacy /publish aliases and legacy TikTok token columns remain compatibility-only.')
   checks.push(`TikTok video-list rollout gates are both ${videoListScopeEnabled ? 'enabled' : 'disabled'}.`)
+  checks.push(`TikTok video stats sync is ${videoStatsSyncEnabled ? 'enabled' : 'disabled'}.`)
   return { ok: errors.length === 0, errors, warnings, checks }
 }
 

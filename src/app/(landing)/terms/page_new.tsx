@@ -338,7 +338,7 @@ export default function TermsPage() {
                     {lang === "en" ? "Contact" : "联系方式"}
                   </h3>
                   <div className="space-y-2 text-sm text-gray-400">
-                    <p><span className="text-gray-500">{lang === "en" ? "Email: " : "邮箱："}</span>toryxai@outlook.com</p>
+                    <p><span className="text-gray-500">{lang === "en" ? "Email: " : "邮箱："}</span>developer@toryxai.com</p>
                   </div>
                 </div>
               </section>

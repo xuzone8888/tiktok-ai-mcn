@@ -71,12 +71,18 @@ export function TaskManager() {
             const data = await res.json()
 
             if (res.ok) {
+                const receivedTasks = data.tasks || []
                 if (reset) {
-                    setTasks(data.tasks || [])
+                    setTasks(receivedTasks)
+                    setSelectedTask(current => (
+                        current
+                            ? receivedTasks.find((task: TaskGroup) => task.id === current.id) || current
+                            : null
+                    ))
                 } else {
-                    setTasks(prev => [...prev, ...data.tasks])
+                    setTasks(prev => [...prev, ...receivedTasks])
                 }
-                setHasMore((data.tasks?.length || 0) === 20)
+                setHasMore(receivedTasks.length === 20)
             }
         } catch (error) {
             console.error('Fetch tasks failed:', error)
@@ -181,43 +187,27 @@ export function TaskManager() {
         }
     }
 
-    const handleDeleteItem = async (itemId: string, deleteTikTokVideo: boolean) => {
+    const handleDeleteItem = async (itemId: string) => {
+        if (!selectedTask) return false
         try {
-            const res = await fetch(`/api/publish/tasks/${selectedTask?.id}/items/${itemId}`, {
+            const res = await fetch(`/api/publish/tasks/${selectedTask.id}/items/${itemId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deleteTikTokVideo })
+                body: JSON.stringify({ deleteTikTokVideo: false })
             })
 
             const data = await res.json()
 
             if (!res.ok) throw new Error(data.error || '删除失败')
 
-            if (data.tiktokDeleteStatus === 'failed') {
-                toast({
-                    title: '本地删除成功',
-                    description: '但 TikTok 视频删除失败',
-                })
-            } else {
-                toast({
-                    title: '删除成功',
-                    description: deleteTikTokVideo ? '本地与 TikTok 视频均已删除' : '本地任务已删除',
-                })
-            }
-
-            // 乐观更新本地状态
-            // deleteTikTokVideo 仅在被删项是 published 状态时由 TaskGroupDetail 传入 true
-            setTasks(prev => prev.map(t => {
-                if (t.id === selectedTask?.id) {
-                    return {
-                        ...t,
-                        total_items: t.total_items - 1,
-                        // 只有删除已发布的项才减少 published_count
-                        published_count: deleteTikTokVideo ? Math.max(0, t.published_count - 1) : t.published_count
-                    }
-                }
-                return t
-            }))
+            toast({
+                title: '本地记录已删除',
+                description: data.deletedItemStatus === 'published'
+                    ? 'TikTok 线上视频未被删除'
+                    : '任务统计已更新',
+            })
+            await fetchTasks(true)
+            return true
 
         } catch (error: any) {
             toast({
@@ -225,6 +215,7 @@ export function TaskManager() {
                 description: error.message,
                 variant: 'destructive',
             })
+            return false
         }
     }
 

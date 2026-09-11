@@ -99,10 +99,9 @@ export async function POST(request: NextRequest) {
       .lt('processing_expires_at', now)
 
     if (pendingCleanupError || processingCleanupError) {
-      console.error(
-        '[TikTok Business OAuth] Failed to clean expired state:',
-        pendingCleanupError?.message || processingCleanupError?.message,
-      )
+      console.error('[TikTok Business OAuth] Failed to clean expired state:', {
+        code: pendingCleanupError?.code || processingCleanupError?.code || 'database_error',
+      })
       return NextResponse.json({ error: '无法初始化 TikTok 评论授权' }, { status: 500 })
     }
 
@@ -124,7 +123,7 @@ export async function POST(request: NextRequest) {
           { status: 409 },
         )
       }
-      console.error('[TikTok Business OAuth] Failed to store state:', stateError.message)
+      console.error('[TikTok Business OAuth] Failed to store state:', { code: stateError.code || 'database_error' })
       return NextResponse.json({ error: '无法初始化 TikTok 评论授权' }, { status: 500 })
     }
 
@@ -132,9 +131,16 @@ export async function POST(request: NextRequest) {
       authUrl,
     })
   } catch (error) {
-    console.error('[TikTok Business OAuth] URL generation failed:', error)
+    const publicMessage = error instanceof Error
+      && error.message.startsWith('TikTok Business OAuth configuration is incomplete.')
+      ? 'TikTok Business OAuth configuration is incomplete.'
+      : '无法生成 TikTok 评论授权链接'
+    console.error('[TikTok Business OAuth] URL generation failed:', {
+      name: error instanceof Error ? error.name : 'Error',
+      code: 'authorization_url_failed',
+    })
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : '无法生成 TikTok 评论授权链接' },
+      { error: publicMessage },
       { status: 500 },
     )
   }

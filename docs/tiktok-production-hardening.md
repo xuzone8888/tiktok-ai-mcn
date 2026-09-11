@@ -2,8 +2,9 @@
 
 This runbook covers TikTok management, secure tokens, video statistics, Business OAuth,
 comment read/reply, ordinary Login Kit callback fencing, shared Accounts API read budgets,
-independent Business comment revocation, and ordinary Content Posting `FILE_UPLOAD`
-introduced by migrations `20260723` through `20260908`.
+independent Business comment revocation, ordinary Content Posting `FILE_UPLOAD`, durable
+account disconnection, fenced video statistics, and user-controlled deletion introduced
+by migrations `20260723` through `20260911`.
 
 It deliberately keeps the legacy `/publish` aliases and the legacy token columns. Removing either is a separate post-stabilization project.
 
@@ -40,6 +41,9 @@ Apply migrations in this order and wait for PostgREST schema-cache visibility af
 6. `20260728_tiktok_oauth_state_fencing.sql`
 7. `20260808_tiktok_business_comment_controls.sql`
 8. `20260908_tiktok_content_posting_file_upload.sql`
+9. `20260909_tiktok_account_disconnect_hardening.sql`
+10. `20260909_tiktok_video_data_hardening.sql`
+11. `20260911_tiktok_user_data_deletion.sql`
 
 Before enabling any flag, verify every runtime RPC without reading credentials:
 
@@ -69,7 +73,8 @@ WITH required(signature) AS (
     ('public.claim_tiktok_business_api_budget(uuid,uuid,text,integer,integer)'),
     ('public.begin_tiktok_business_token_revocation(uuid,uuid,uuid,uuid,integer,boolean)'),
     ('public.complete_tiktok_business_token_revocation(uuid,uuid,uuid,uuid)'),
-    ('public.defer_tiktok_business_token_revocation(uuid,uuid,uuid,uuid,text,text)')
+    ('public.defer_tiktok_business_token_revocation(uuid,uuid,uuid,uuid,text,text)'),
+    ('public.delete_tiktok_user_data(uuid)')
 ),
 resolved AS (
   SELECT signature, to_regprocedure(signature) AS function_oid

@@ -38,9 +38,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ accounts, comments: saved.comments })
   } catch (error) {
-    console.error('Facebook comment bootstrap API error:', error)
+    console.error('Facebook comment bootstrap API error:', {
+      name: error instanceof Error ? error.name : 'Error',
+      code: 'internal_error',
+    })
     return NextResponse.json(
-      { error: getApiMessage('internal_error', error instanceof Error ? error.message : 'Server error', lang), code: 'internal_error' },
+      { error: getApiMessage('internal_error', 'Server error', lang), code: 'internal_error' },
       { status: 500 }
     )
   }

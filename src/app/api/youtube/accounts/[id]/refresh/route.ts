@@ -13,11 +13,12 @@ import { markYouTubeAuthorizationInvalid } from '@/lib/youtube/data-governance'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   let ownedAccountId: string | null = null
   let adminSupabase: any = null
 
   try {
+    const { id } = await params
     const supabase = await createClient()
     const { data: { user }, error: userError } = await supabase.auth.getUser()
 
@@ -28,7 +29,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const { data: account, error: fetchError } = await (supabase as any)
       .from('youtube_accounts')
       .select('id, scopes')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
@@ -70,7 +71,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         authorization_invalidated_at: null,
         updated_at: now,
       })
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       return NextResponse.json({ error: '更新 YouTube 账号失败' }, { status: 500 })

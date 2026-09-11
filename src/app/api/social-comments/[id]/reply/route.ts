@@ -18,7 +18,7 @@ function isRequestObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSocialCommentsApiEnabled()) {
     return NextResponse.json({ error: 'Not found', code: 'not_found' }, { status: 404 })
   }
@@ -63,7 +63,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       )
     }
 
-    const reply = await replyToSocialComment(user.id, params.id, message, idempotencyKey, {
+    const { id } = await params
+    const reply = await replyToSocialComment(user.id, id, message, idempotencyKey, {
       enabledPlatforms: getEnabledSocialCommentPlatforms(),
       instagramReplyEnabled: isInstagramCommentsReplyEnabled(),
       tiktokReplyEnabled: isTikTokCommentsReplyEnabled(),
@@ -72,7 +73,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ reply })
   } catch (error) {
     const mapped = mapSocialCommentError(error, 'Reply failed.')
-    console.error('Social comment reply API error:', error)
+    console.error('Social comment reply API error:', {
+      name: error instanceof Error ? error.name : 'Error',
+      code: mapped.code,
+      status: mapped.status,
+    })
     return NextResponse.json(
       { error: getApiMessage(mapped.code, mapped.message, lang), code: mapped.code },
       { status: mapped.status }

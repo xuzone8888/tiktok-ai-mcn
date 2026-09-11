@@ -4,13 +4,12 @@
  * DELETE /api/publish/tasks/[id]/items/[itemId]
  * 
  * - 待发布：直接删除
- * - 已发布：询问是否删除 TikTok 视频
+ * - 已发布：仅删除本地记录，TikTok 线上视频需在 App 中手动删除
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+
 import { createClient } from '@/lib/supabase/server'
-import { getValidTikTokAccessToken } from '@/lib/tiktok/token-manager'
 
 const AMBIGUOUS_PUBLISH_ERROR_CODES = new Set([
     'TIKTOK_INIT_OUTCOME_UNKNOWN',
@@ -37,14 +36,12 @@ export async function DELETE(
             .select(`
                 id,
                 task_id,
-                account_id,
                 status,
                 error_code,
                 tiktok_publish_id,
                 tiktok_transfer_method,
                 tiktok_upload_outcome,
                 publish_init_started_at,
-                tiktok_share_id,
                 publish_tasks!inner(user_id)
             `)
             .eq('id', itemId)
@@ -90,7 +87,7 @@ export async function DELETE(
             }, { status: 409 })
         }
 
-        // 解析请求体（已发布任务需要确认是否删除 TikTok 视频）
+        // Reject old clients that still request the removed remote-delete capability.
         let deleteTikTokVideo = false
         if (isPublished) {
             try {
@@ -101,38 +98,11 @@ export async function DELETE(
             }
         }
 
-        let tiktokDeleteResult = null
-
-        // 如果需要删除 TikTok 视频，调用 TikTok API
-        if (deleteTikTokVideo && itemData.tiktok_share_id) {
-            const { data: ownedAccount, error: accountError } = await supabase
-                .from('tiktok_accounts')
-                .select('id')
-                .eq('id', itemData.account_id)
-                .eq('user_id', user.id)
-                .eq('account_type', 'normal')
-                .eq('status', 'active')
-                .maybeSingle()
-
-            if (accountError || !ownedAccount || taskUserId !== user.id) {
-                return NextResponse.json(
-                    { error: '任务账号不存在、类型不符或无权访问' },
-                    { status: 403 }
-                )
-            }
-
-            try {
-                const accessToken = await getValidTikTokAccessToken(
-                    createAdminClient(),
-                    ownedAccount.id
-                )
-                const { deleteVideo } = await import('@/lib/tiktok/content-posting')
-                const success = await deleteVideo(accessToken, itemData.tiktok_share_id)
-                tiktokDeleteResult = success ? 'success' : 'failed'
-            } catch (error) {
-                console.error('Failed to prepare TikTok token for deletion:', error)
-                tiktokDeleteResult = 'no_token'
-            }
+        if (deleteTikTokVideo) {
+            return NextResponse.json({
+                error: '当前 TikTok API 不支持由本应用删除已发布视频，请先在 TikTok App 中手动删除',
+                code: 'tiktok_remote_delete_unsupported',
+            }, { status: 400 })
         }
 
         // 删除任务项
@@ -151,8 +121,8 @@ export async function DELETE(
 
         return NextResponse.json({
             success: true,
-            deletedTikTokVideo: deleteTikTokVideo,
-            tiktokDeleteStatus: tiktokDeleteResult
+            deletedTikTokVideo: false,
+            deletedItemStatus: status,
         })
 
     } catch (error) {

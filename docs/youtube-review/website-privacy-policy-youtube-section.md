@@ -73,7 +73,7 @@ When Star Gaze can no longer verify that your authorization remains valid, we st
 
 You may disconnect one YouTube account or use the **Delete all YouTube data** control through the YouTube account management interface in Star Gaze. Local account data is deleted transactionally. If Google is temporarily unavailable, the refresh token is retained in a service-role-only revocation queue solely to retry revocation and is deleted immediately after success or no later than seven (7) calendar days. You may also revoke Star Gaze’s access directly from [Google Account third-party connections](https://security.google.com/settings/security/permissions).
 
-You may request deletion of YouTube-related data stored by Star Gaze by using an available account or data-deletion control or by contacting us at **toryxai@outlook.com**. After reasonably verifying the request, we will delete the YouTube-related user data under our control as soon as possible and no later than seven (7) calendar days, unless a longer period is required by applicable law. We will inform you if a legally required exception applies.
+You may request deletion of YouTube-related data stored by Star Gaze by using an available account or data-deletion control or by contacting us at **developer@toryxai.com**. After reasonably verifying the request, we will delete the YouTube-related user data under our control as soon as possible and no later than seven (7) calendar days, unless a longer period is required by applicable law. We will inform you if a legally required exception applies.
 
 If you delete your Star Gaze account, we will also delete or de-identify YouTube-related user data associated with that account as soon as possible and no later than seven (7) calendar days, except for information that we are legally required to retain.
 
@@ -96,7 +96,7 @@ For more information about Google’s privacy practices, please review the [Goog
 For questions, complaints, authorization issues, or requests concerning YouTube or Google user data, contact:
 
 **Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)**
-Email: **toryxai@outlook.com**
+Email: **developer@toryxai.com**
 Website: **https://toryxai.com**
 Address: Wuhan, Hubei Province, China
 
@@ -171,7 +171,7 @@ YouTube 与 Google 用户数据仅向授权用户本人，以及该用户通过 
 
 您可以通过 Star Gaze 的 YouTube 账号管理界面解绑单个 YouTube 账号或使用**删除全部 YouTube 数据**功能。本地账号数据通过事务删除。如 Google 暂时不可用，刷新令牌将仅为重试撤权而暂存于仅服务角色可访问的队列中，并在撤权成功后立即删除或最迟不超过七（7）个自然日删除。您也可以通过 [Google 账号第三方连接页面](https://security.google.com/settings/security/permissions)直接撤销 Star Gaze 的访问权限。
 
-您可以使用可用的账号或数据删除功能，或者发送邮件至 **toryxai@outlook.com**，要求删除 Star Gaze 保存的 YouTube 相关数据。在合理核验请求后，我们将尽快删除由我们控制的 YouTube 相关用户数据，且最迟不超过七（7）个自然日；适用法律要求更长保存期限的除外。如存在法定例外，我们会向您说明。
+您可以使用可用的账号或数据删除功能，或者发送邮件至 **developer@toryxai.com**，要求删除 Star Gaze 保存的 YouTube 相关数据。在合理核验请求后，我们将尽快删除由我们控制的 YouTube 相关用户数据，且最迟不超过七（7）个自然日；适用法律要求更长保存期限的除外。如存在法定例外，我们会向您说明。
 
 如果您注销 Star Gaze 账号，我们也会尽快删除或去标识化与该账号相关的 YouTube 用户数据，且最迟不超过七（7）个自然日；法律要求保留的信息除外。
 
@@ -194,7 +194,7 @@ Star Gaze 对从 Google API 获取的信息的使用及传输，将遵守 [Googl
 如对 YouTube 或 Google 用户数据存在疑问、投诉、授权问题或权利请求，请联系：
 
 **武汉观星文化传媒有限公司（Star Gaze）**
-邮箱：**toryxai@outlook.com**
+邮箱：**developer@toryxai.com**
 网站：**https://toryxai.com**
 地址：中国湖北省武汉市
 

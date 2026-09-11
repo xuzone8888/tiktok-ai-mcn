@@ -1430,7 +1430,7 @@ export default function PublishPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                        <TikTokLogo className="h-8 w-8 shrink-0 text-white" />
+                        <TikTokLogo className="h-12 w-12 shrink-0 text-white" />
                         <span className="text-white drop-shadow-lg">TikTok 视频管理</span>
                     </h1>
                     <p className="mt-1 text-white/60 ml-[19px]">

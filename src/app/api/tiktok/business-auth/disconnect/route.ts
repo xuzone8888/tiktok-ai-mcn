@@ -90,6 +90,15 @@ export async function DELETE(request: NextRequest) {
 
   if (claimError) {
     console.error('[TikTok Business OAuth] Disconnect claim failed:', claimError.code)
+    if (claimError.message === 'comment_reply_in_progress') {
+      return NextResponse.json(
+        {
+          code: 'comment_reply_in_progress',
+          error: '当前账号仍有未确认的评论回复，请先同步评论确认结果，再断开授权',
+        },
+        { status: 409 },
+      )
+    }
     return NextResponse.json({ error: '无法安全启动评论授权断开流程' }, { status: 503 })
   }
 

@@ -87,5 +87,9 @@ export function mapAccountGroupError(error: unknown) {
     return { status: 400, message: "分组至少需要保留 1 个账号；如不再使用，请删除整个分组" };
   }
 
+  if (rawMessage.includes("ACTIVE_GROUP_TASK")) {
+    return { status: 409, message: "该账号组已有未完成任务，请等待完成后再调整账号" };
+  }
+
   return { status: 500, message: "账号分组操作失败，请稍后重试" };
 }

@@ -98,7 +98,8 @@ export async function getTikTokAccountTokens(
         .from('tiktok_accounts')
         .select('id, account_type')
         .in('id', uniqueIds)
-        .eq('account_type', 'normal');
+        .eq('account_type', 'normal')
+        .eq('status', 'active');
 
     if (accountError) {
         throw new Error(`Failed to validate normal TikTok accounts: ${accountError.message}`);
@@ -128,7 +129,8 @@ export async function getTikTokAccountTokens(
         .from('tiktok_accounts')
         .select('id, access_token, refresh_token, access_token_expires_at, token_expires_at, refresh_token_expires_at, updated_at')
         .in('id', fallbackIds)
-        .eq('account_type', 'normal');
+        .eq('account_type', 'normal')
+        .eq('status', 'active');
 
     if (legacyError) {
         throw new Error(`Failed to load legacy TikTok tokens: ${legacyError.message}`);

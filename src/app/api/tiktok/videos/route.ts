@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
                 code: error.code,
             }, { status: error.httpStatus >= 400 && error.httpStatus < 600 ? error.httpStatus : 502 });
         }
-        console.error('TikTok video list failed:', error);
+        console.error('TikTok video list failed unexpectedly');
         return NextResponse.json({ error: 'TikTok 视频列表暂时不可用' }, { status: 500 });
     }
 }

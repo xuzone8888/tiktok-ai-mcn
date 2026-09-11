@@ -79,7 +79,7 @@ YouTube or Google may change, restrict, suspend, or discontinue API features, sc
 Questions concerning the YouTube integration may be sent to:
 
 **Wuhan Guanxing Cultural Media Co., Ltd. (Star Gaze)**
-Email: **toryxai@outlook.com**
+Email: **developer@toryxai.com**
 Website: **https://toryxai.com**
 Address: Wuhan, Hubei Province, China
 
@@ -160,7 +160,7 @@ YouTube 或 Google 可能变更、限制、暂停或停止 API 功能、权限�
 如对 YouTube 集成功能存在疑问，请联系：
 
 **武汉观星文化传媒有限公司（Star Gaze）**
-邮箱：**toryxai@outlook.com**
+邮箱：**developer@toryxai.com**
 网站：**https://toryxai.com**
 地址：中国湖北省武汉市
 

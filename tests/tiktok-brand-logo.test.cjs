@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -28,6 +30,10 @@ test('TikTok platform navigation uses the shared brand logo like YouTube and Fac
     assert.notEqual(start, -1, `missing sidebar item: ${title}`)
     assert.match(sidebar.slice(start, start + 260), /icon: TikTokLogo/)
   }
+
+  assert.match(sidebar, /const isTikTokBrandIcon = Icon === TikTokLogo/)
+  assert.match(sidebar, /isTikTokBrandIcon \|\| isYouTubeBrandIcon \|\| isFacebookBrandIcon/)
+  assert.match(sidebar, /isTikTokBrandIcon\)[\s\S]*?<TikTokLogo className="h-7 w-7 text-white"/)
 })
 
 test('TikTok product surfaces use the shared logo instead of unrelated generic brand stand-ins', () => {
@@ -68,8 +74,16 @@ test('Privacy Policy and Terms use the TikTok logo for TikTok integration sectio
     terms.indexOf('{/* 17. Subscription */}')
   )
 
-  assert.match(privacySection, /<TikTokLogo className="h-6 w-6"/)
+  assert.match(privacySection, /flex h-12 w-12[\s\S]*?<TikTokLogo className="h-7 w-7 text-white"/)
   assert.doesNotMatch(privacySection, /<ShoppingBag/)
-  assert.match(termsSection, /<TikTokLogo className="h-6 w-6"/)
+  assert.match(termsSection, /flex h-12 w-12[\s\S]*?<TikTokLogo className="h-7 w-7 text-white"/)
   assert.doesNotMatch(termsSection, /<Youtube/)
+})
+
+test('TikTok account and video management headings use a prominent brand mark', () => {
+  const accounts = read('src/app/(main)/publish/accounts/page.tsx')
+  const publish = read('src/app/(main)/publish/page.tsx')
+
+  assert.match(accounts, /<TikTokLogo className="h-12 w-12 shrink-0 text-white"/)
+  assert.match(publish, /<TikTokLogo className="h-12 w-12 shrink-0 text-white"/)
 })

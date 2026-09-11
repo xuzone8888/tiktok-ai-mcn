@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { buildTikTokCountPatch } from '@/lib/tiktok/account-binding';
 import { isUuid, mapAccountGroupError } from '@/lib/tiktok/account-groups';
 import { isTikTokGroupsDemoMode, refreshDemoAccount } from '@/lib/tiktok/demo-account-groups';
 import { getUserInfo, isTikTokRefreshCredentialInvalid } from '@/lib/tiktok/oauth';
@@ -70,22 +71,22 @@ export async function POST(
             creator_info_cached_at: null,
             display_name: userInfo.display_name,
             avatar_url: userInfo.avatar_url,
-            follower_count: userInfo.follower_count || 0,
-            following_count: userInfo.following_count || 0,
-            likes_count: userInfo.likes_count || 0,
-            video_count: userInfo.video_count || 0,
+            ...buildTikTokCountPatch(userInfo),
             status: 'active',
             updated_at: new Date().toISOString(),
             ...(refreshResult.providerResponse?.scope
                 ? { scopes: refreshResult.providerResponse.scope.split(',') }
                 : {}),
         };
-        const { error: updateError } = await supabase
+        const { data: updatedAccount, error: updateError } = await supabase
             .from('tiktok_accounts')
             .update(accountPatch)
             .eq('id', id)
             .eq('user_id', user.id)
-            .eq('account_type', 'normal');
+            .eq('account_type', 'normal')
+            .eq('status', 'active')
+            .select('id')
+            .maybeSingle();
 
         if (updateError) {
             console.error('Error updating account:', updateError);
@@ -94,13 +95,23 @@ export async function POST(
                 { status: 500 }
             );
         }
+        if (!updatedAccount) {
+            return NextResponse.json(
+                { error: 'Account authorization changed during refresh' },
+                { status: 409 }
+            );
+        }
 
         return NextResponse.json({
             success: true,
             expiresAt: refreshResult.token.refresh_token_expires_at
         });
     } catch (error) {
-        console.error('Error refreshing token:', error);
+        const refreshCredentialInvalid = isTikTokRefreshCredentialInvalid(error);
+        console.error(
+            'TikTok account refresh failed:',
+            refreshCredentialInvalid ? 'credential_invalid' : 'refresh_failed'
+        );
 
         // Only an explicit provider rejection of the refresh credential changes
         // account lifecycle. Network, profile, lease, RPC, and database failures
@@ -111,7 +122,7 @@ export async function POST(
                 const supabase = await createClient();
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) throw new Error('Unauthorized');
-                const { error: expireError } = await supabase
+                const { error: expireError } = await createAdminClient()
                     .from('tiktok_accounts')
                     .update({ status: 'expired' })
                     .eq('id', id)
@@ -126,8 +137,12 @@ export async function POST(
         }
 
         return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to refresh token' },
-            { status: 500 }
+            {
+                error: refreshCredentialInvalid
+                    ? 'TikTok authorization expired. Please reconnect the account.'
+                    : 'Failed to refresh TikTok authorization',
+            },
+            { status: refreshCredentialInvalid ? 409 : 500 }
         );
     }
 }

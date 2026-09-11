@@ -599,8 +599,16 @@ export default function SocialCommentsClient({
       && isCommentReplyPlatformEnabled(comment, instagramReplyEnabled, tiktokReplyEnabled)
   )
   const replyableInboxComments = inboxComments.filter(canReplyToComment)
-  const allReplyableSelected = replyableInboxComments.length > 0
-    && replyableInboxComments.every((comment) => selectedReplyIds.has(comment.id))
+  // TikTok Organic replies must remain one explicit user submission per
+  // provider write. They are intentionally excluded from every batch path.
+  const batchReplyableInboxComments = replyableInboxComments.filter(
+    (comment) => comment.platform !== "tiktok"
+  )
+  const selectedBatchReplyCount = batchReplyableInboxComments.filter(
+    (comment) => selectedReplyIds.has(comment.id)
+  ).length
+  const allReplyableSelected = batchReplyableInboxComments.length > 0
+    && batchReplyableInboxComments.every((comment) => selectedReplyIds.has(comment.id))
 
   useEffect(() => {
     if (translationCandidates.length === 0) return
@@ -1285,9 +1293,13 @@ export default function SocialCommentsClient({
 
   const sendBatchReply = async () => {
     const message = batchDraft.trim()
-    if (!message || selectedReplyIds.size === 0 || batchReplying) return
+    if (!message || batchReplying) return
 
-    const targets = inboxComments.filter((comment) => selectedReplyIds.has(comment.id) && canReplyToComment(comment))
+    const targets = inboxComments.filter((comment) => (
+      comment.platform !== "tiktok"
+      && selectedReplyIds.has(comment.id)
+      && canReplyToComment(comment)
+    ))
     if (targets.length === 0) return
 
     const workspaceToken = workspaceGuardRef.current.capture()
@@ -1422,7 +1434,11 @@ export default function SocialCommentsClient({
   }
 
   const toggleAllReplyable = () => {
-    setSelectedReplyIds(allReplyableSelected ? new Set() : new Set(replyableInboxComments.map((comment) => comment.id)))
+    setSelectedReplyIds(
+      allReplyableSelected
+        ? new Set()
+        : new Set(batchReplyableInboxComments.map((comment) => comment.id))
+    )
   }
 
   return (
@@ -1538,7 +1554,7 @@ export default function SocialCommentsClient({
                   <Checkbox
                     checked={allReplyableSelected}
                     onCheckedChange={toggleAllReplyable}
-                    disabled={replyableInboxComments.length === 0 || batchReplying}
+                    disabled={batchReplyableInboxComments.length === 0 || batchReplying}
                     aria-label={TEXT.selectReplyable[lang]}
                     className="border-white/25 data-[state=checked]:border-cyan-300 data-[state=checked]:bg-cyan-300 data-[state=checked]:text-black"
                   />
@@ -1552,7 +1568,7 @@ export default function SocialCommentsClient({
                     size="sm"
                     className="h-8 gap-1.5 rounded-lg px-2.5"
                     onClick={() => setBatchReplyOpen((open) => !open)}
-                    disabled={selectedReplyIds.size === 0 || batchReplying}
+                    disabled={selectedBatchReplyCount === 0 || batchReplying}
                   >
                     <CheckSquare2 className="h-3.5 w-3.5" />
                     {TEXT.batchReply[lang]}
@@ -1561,7 +1577,7 @@ export default function SocialCommentsClient({
               </div>
               {batchReplyOpen ? (
                 <div className="space-y-2 border-b border-cyan-300/15 bg-cyan-400/[0.04] p-3">
-                  <div className="text-xs text-cyan-100/70">{selectedReplyIds.size} {TEXT.selectedComments[lang]}</div>
+                  <div className="text-xs text-cyan-100/70">{selectedBatchReplyCount} {TEXT.selectedComments[lang]}</div>
                   <Textarea
                     value={batchDraft}
                     onChange={(event) => setBatchDraft(event.target.value)}
@@ -1572,7 +1588,7 @@ export default function SocialCommentsClient({
                   <Button
                     type="button"
                     className="h-9 w-full gap-2 rounded-lg bg-white text-black hover:bg-white/85"
-                    disabled={!batchDraft.trim() || selectedReplyIds.size === 0 || batchReplying}
+                    disabled={!batchDraft.trim() || selectedBatchReplyCount === 0 || batchReplying}
                     onClick={() => void sendBatchReply()}
                   >
                     <Send className="h-4 w-4" />
@@ -1587,17 +1603,22 @@ export default function SocialCommentsClient({
                   <div className="p-8 text-center text-sm text-white/40">{accountId === "all" ? accountPlaceholder : TEXT.noComments[lang]}</div>
                 ) : inboxComments.map((comment) => {
                   const canReply = canReplyToComment(comment)
+                  const canBatchReply = canReply && comment.platform !== "tiktok"
                   const replyOpen = openReplies.has(comment.id)
                   return (
                     <article key={comment.id} className={cn("mb-1 w-full rounded-lg border px-3 py-3 transition-colors", selectedCommentId === comment.id ? "border-cyan-300/35 bg-cyan-400/10" : "border-transparent hover:border-white/10 hover:bg-white/[0.04]")}>
                       <div className="flex items-start gap-2">
-                        <Checkbox
-                          checked={selectedReplyIds.has(comment.id)}
-                          onCheckedChange={() => toggleReplySelection(comment.id)}
-                          disabled={!canReply || batchReplying}
-                          aria-label={`${TEXT.batchReply[lang]}: ${comment.author_name || PLATFORM_LABELS[comment.platform]}`}
-                          className="mt-1 border-white/25 data-[state=checked]:border-cyan-300 data-[state=checked]:bg-cyan-300 data-[state=checked]:text-black"
-                        />
+                        {canBatchReply ? (
+                          <Checkbox
+                            checked={selectedReplyIds.has(comment.id)}
+                            onCheckedChange={() => toggleReplySelection(comment.id)}
+                            disabled={batchReplying}
+                            aria-label={`${TEXT.batchReply[lang]}: ${comment.author_name || PLATFORM_LABELS[comment.platform]}`}
+                            className="mt-1 border-white/25 data-[state=checked]:border-cyan-300 data-[state=checked]:bg-cyan-300 data-[state=checked]:text-black"
+                          />
+                        ) : (
+                          <span aria-hidden="true" className="mt-1 h-4 w-4 shrink-0" />
+                        )}
                         <button type="button" onClick={() => selectComment(comment)} className="min-w-0 flex-1 text-left">
                           <div className="flex items-center gap-2">
                             {comment.author_avatar_url ? <img src={comment.author_avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" /> : <div className="h-7 w-7 rounded-full bg-white/10" />}

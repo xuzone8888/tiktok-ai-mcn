@@ -39,6 +39,11 @@ export function ScheduledQueue() {
                         scheduled_at: t.scheduled_at
                     }))
                 setTasks(scheduledTasks)
+                setSelectedTask(current => (
+                    current
+                        ? scheduledTasks.find((task: TaskGroup) => task.id === current.id) || current
+                        : null
+                ))
             }
         } catch (error) {
             console.error('Failed to fetch tasks:', error)
@@ -88,8 +93,8 @@ export function ScheduledQueue() {
     }
 
     // 删除任务项
-    const handleDeleteItem = async (itemId: string, deleteTikTokVideo: boolean) => {
-        if (!selectedTask) return
+    const handleDeleteItem = async (itemId: string) => {
+        if (!selectedTask) return false
 
         try {
             const response = await fetch(
@@ -97,21 +102,24 @@ export function ScheduledQueue() {
                 {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ deleteTikTokVideo })
+                    body: JSON.stringify({ deleteTikTokVideo: false })
                 }
             )
 
             if (response.ok) {
                 toast({ title: '任务项已删除' })
                 // 刷新任务列表
-                fetchTasks()
+                await fetchTasks()
+                return true
             } else {
                 const data = await response.json()
                 toast({ variant: 'destructive', title: '删除失败', description: data.error })
+                return false
             }
         } catch (error) {
             console.error('Failed to delete item:', error)
             toast({ variant: 'destructive', title: '删除失败' })
+            return false
         }
     }
 

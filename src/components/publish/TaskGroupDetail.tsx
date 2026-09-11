@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, Square, Trash2, RefreshCw, Play, Heart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,8 +26,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 import { cn } from '@/lib/utils'
 import { TaskItemCard, TaskItem } from './TaskItemCard'
 import { TaskGroup } from './TaskGroupCard'
@@ -36,7 +34,7 @@ interface TaskGroupDetailProps {
     task: TaskGroup | null
     open: boolean
     onClose: () => void
-    onDeleteItem: (itemId: string, deleteTikTokVideo: boolean) => Promise<void>
+    onDeleteItem: (itemId: string) => Promise<boolean>
     onCancelPending: (taskId: string) => Promise<void>
 }
 
@@ -56,7 +54,6 @@ export function TaskGroupDetail({
     // Delete confirmation state
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [itemToDelete, setItemToDelete] = useState<{ id: string, isPublished: boolean } | null>(null)
-    const [syncDeleteTikTok, setSyncDeleteTikTok] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
 
     // Cancel all confirmation
@@ -65,44 +62,78 @@ export function TaskGroupDetail({
     // Stats sync state
     const [syncing, setSyncing] = useState(false)
     const [syncResult, setSyncResult] = useState<{ views: number; likes: number } | null>(null)
+    const [syncError, setSyncError] = useState('')
+    const [syncWarning, setSyncWarning] = useState('')
+    const [itemsError, setItemsError] = useState('')
+    const itemsRequestRef = useRef(0)
+    const itemsAbortRef = useRef<AbortController | null>(null)
+    const syncRequestRef = useRef(0)
+    const syncAbortRef = useRef<AbortController | null>(null)
+    const taskId = task?.id || ''
 
     // ... existing fetch logic ...
     const fetchItems = useCallback(async () => {
-        if (!task) return
+        if (!taskId) return
+        const requestId = itemsRequestRef.current + 1
+        itemsRequestRef.current = requestId
+        itemsAbortRef.current?.abort()
+        const controller = new AbortController()
+        itemsAbortRef.current = controller
         setLoading(true)
+        setItemsError('')
         try {
             const params = new URLSearchParams({
                 page: page.toString(),
                 limit: '20',
                 status: statusFilter
             })
-            const res = await fetch(`/api/publish/tasks/${task.id}/items?${params}`)
+            const res = await fetch(`/api/publish/tasks/${taskId}/items?${params}`, {
+                signal: controller.signal,
+            })
             const data = await res.json()
-            if (res.ok) {
-                setItems(data.items || [])
-                setTotalPages(data.pagination?.totalPages || 1)
-            }
+            if (!res.ok) throw new Error(data.error || '获取任务项失败')
+            if (itemsRequestRef.current !== requestId) return
+            setItems(data.items || [])
+            setTotalPages(data.pagination?.totalPages || 1)
         } catch (error) {
-            console.error('Failed to fetch items:', error)
+            if (itemsRequestRef.current !== requestId) return
+            if (error instanceof DOMException && error.name === 'AbortError') return
+            setItemsError(error instanceof Error ? error.message : '获取任务项失败')
         } finally {
-            setLoading(false)
+            if (itemsRequestRef.current === requestId) setLoading(false)
         }
-    }, [task, page, statusFilter])
+    }, [taskId, page, statusFilter])
 
     useEffect(() => {
-        if (open && task) { setPage(1); fetchItems(); }
-    }, [open, task, fetchItems])
+        if (open && taskId) {
+            syncRequestRef.current += 1
+            syncAbortRef.current?.abort()
+            setSyncing(false)
+            setPage(1)
+            setSyncResult(null)
+            setSyncError('')
+            setSyncWarning('')
+        }
+        if (!open) {
+            syncRequestRef.current += 1
+            syncAbortRef.current?.abort()
+            setSyncing(false)
+        }
+    }, [open, taskId])
 
     useEffect(() => {
-        if (open && task) { fetchItems(); }
-    }, [page, statusFilter, fetchItems, open, task])
+        if (open && taskId) void fetchItems()
+        return () => {
+            itemsRequestRef.current += 1
+            itemsAbortRef.current?.abort()
+        }
+    }, [fetchItems, open, taskId])
 
     // --- Action Handlers ---
 
     const handleDeleteClick = (itemId: string, isPublished: boolean) => {
         setItemToDelete({ id: itemId, isPublished })
         // Default to checking "Sync Delete" if published, for convenience
-        setSyncDeleteTikTok(isPublished)
         setDeleteConfirmOpen(true)
     }
 
@@ -110,9 +141,11 @@ export function TaskGroupDetail({
         if (!itemToDelete) return
         setIsDeleting(true)
         try {
-            await onDeleteItem(itemToDelete.id, syncDeleteTikTok && itemToDelete.isPublished)
-            setDeleteConfirmOpen(false)
-            fetchItems()
+            const deleted = await onDeleteItem(itemToDelete.id)
+            if (deleted) {
+                setDeleteConfirmOpen(false)
+                void fetchItems()
+            }
         } finally {
             setIsDeleting(false)
             setItemToDelete(null)
@@ -140,26 +173,38 @@ export function TaskGroupDetail({
 
     // 同步TikTok视频统计数据
     const handleSyncStats = async () => {
-        if (!task || syncing) return
+        if (!taskId || syncing) return
+        const requestId = syncRequestRef.current + 1
+        syncRequestRef.current = requestId
+        syncAbortRef.current?.abort()
+        const controller = new AbortController()
+        syncAbortRef.current = controller
         setSyncing(true)
         setSyncResult(null)
+        setSyncError('')
+        setSyncWarning('')
         try {
-            const res = await fetch(`/api/publish/tasks/${task.id}/sync-stats`, {
-                method: 'POST'
+            const res = await fetch(`/api/publish/tasks/${taskId}/sync-stats`, {
+                method: 'POST',
+                signal: controller.signal,
             })
             const data = await res.json()
-            if (res.ok && data.success) {
-                setSyncResult({
-                    views: data.total_views || 0,
-                    likes: data.total_likes || 0
-                })
-                // Refresh items to show updated stats
-                fetchItems()
+            if (syncRequestRef.current !== requestId) return
+            if (!res.ok || !data.success) throw new Error(data.error || '视频数据同步失败')
+            setSyncResult({
+                views: data.total_views || 0,
+                likes: data.total_likes || 0
+            })
+            if (Array.isArray(data.errors) && data.errors.length > 0) {
+                setSyncWarning(data.errors.slice(0, 3).join('；'))
             }
+            void fetchItems()
         } catch (error) {
-            console.error('Failed to sync stats:', error)
+            if (syncRequestRef.current !== requestId) return
+            if (error instanceof DOMException && error.name === 'AbortError') return
+            setSyncError(error instanceof Error ? error.message : '视频数据同步失败')
         } finally {
-            setSyncing(false)
+            if (syncRequestRef.current === requestId) setSyncing(false)
         }
     }
 
@@ -239,7 +284,10 @@ export function TaskGroupDetail({
                     {/* Dark Toolbar */}
                     <div className="px-6 py-3 border-b border-white/10 bg-zinc-900/30 flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-3">
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <Select value={statusFilter} onValueChange={(value) => {
+                                setStatusFilter(value)
+                                setPage(1)
+                            }}>
                                 <SelectTrigger className="w-[120px] h-8 bg-zinc-900 border-white/10 text-zinc-300 text-xs focus:ring-zinc-700">
                                     <SelectValue placeholder="全部状态" />
                                 </SelectTrigger>
@@ -299,21 +347,39 @@ export function TaskGroupDetail({
                         </div>
                     </div>
 
+                    {(syncError || syncWarning) && (
+                        <div className={cn(
+                            'mx-6 mt-3 rounded-lg border px-3 py-2 text-xs',
+                            syncError
+                                ? 'border-red-500/20 bg-red-500/10 text-red-200'
+                                : 'border-amber-500/20 bg-amber-500/10 text-amber-100'
+                        )}>
+                            {syncError || syncWarning}
+                        </div>
+                    )}
+
                     {/* Dark List */}
                     <div className="flex-1 overflow-y-auto p-6 bg-zinc-950 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-                        {loading ? (
+                        {itemsError && (
+                            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
+                                {itemsError}
+                            </div>
+                        )}
+                        {!itemsError && loading && (
                             <div className="flex flex-col items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 animate-spin text-zinc-700 mb-4" />
                                 <p className="text-zinc-600 text-sm">加载任务数据...</p>
                             </div>
-                        ) : items.length === 0 ? (
+                        )}
+                        {!itemsError && !loading && items.length === 0 && (
                             <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
                                 <div className="p-4 bg-white/5 rounded-full mb-4">
                                     <Square className="w-8 h-8 text-zinc-700" />
                                 </div>
                                 <p className="text-zinc-500 font-medium text-sm">没有找到相关任务项</p>
                             </div>
-                        ) : (
+                        )}
+                        {!itemsError && !loading && items.length > 0 && (
                             <div className="space-y-3">
                                 {items.map(item => (
                                     <TaskItemCard
@@ -364,24 +430,7 @@ export function TaskGroupDetail({
                         <AlertDialogTitle className="text-zinc-100">确认删除任务项？</AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
                             此操作将从本地记录中删除该任务。
-                            {itemToDelete?.isPublished && (
-                                <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                                    <div className="flex items-center space-x-2">
-                                        <Switch
-                                            id="sync-delete"
-                                            checked={syncDeleteTikTok}
-                                            onCheckedChange={setSyncDeleteTikTok}
-                                            className="data-[state=checked]:bg-amber-500"
-                                        />
-                                        <Label htmlFor="sync-delete" className="text-sm font-medium text-amber-500 cursor-pointer">
-                                            同时从 TikTok 删除视频 (不可恢复)
-                                        </Label>
-                                    </div>
-                                    <p className="text-xs text-amber-500/70 mt-2 ml-10">
-                                        开启后，我们将尝试调用 TikTok API 删除线上视频。
-                                    </p>
-                                </div>
-                            )}
+                            {itemToDelete?.isPublished && '这只会删除本地任务记录，不会删除 TikTok 上的视频。如需删除线上视频，请先在 TikTok App 中手动操作。'}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -392,7 +441,7 @@ export function TaskGroupDetail({
                                 handleConfirmDelete()
                             }}
                             disabled={isDeleting}
-                            className={cn(syncDeleteTikTok ? "bg-red-600 hover:bg-red-700" : "bg-white text-black hover:bg-zinc-200")}
+                            className="bg-white text-black hover:bg-zinc-200"
                         >
                             {isDeleting ? (
                                 <>
@@ -402,7 +451,7 @@ export function TaskGroupDetail({
                             ) : (
                                 <>
                                     <Trash2 className="w-4 h-4 mr-2" />
-                                    {syncDeleteTikTok ? '确认并不留痕迹' : '确认删除'}
+                                    确认删除本地记录
                                 </>
                             )}
                         </AlertDialogAction>

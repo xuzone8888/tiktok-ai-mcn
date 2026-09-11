@@ -69,6 +69,7 @@ export function TikTokVideoManager() {
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [error, setError] = useState('');
   const videoRequestRef = useRef(0);
+  const videoAbortRef = useRef<AbortController | null>(null);
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === selectedAccountId) || null,
@@ -112,6 +113,9 @@ export function TikTokVideoManager() {
     if (!TIKTOK_VIDEO_LIST_UI_ENABLED) return;
     const requestId = videoRequestRef.current + 1;
     videoRequestRef.current = requestId;
+    videoAbortRef.current?.abort();
+    const controller = new AbortController();
+    videoAbortRef.current = controller;
     setError('');
     if (!selectedAccountId || requiresReauthorization) {
       setVideos([]);
@@ -126,7 +130,9 @@ export function TikTokVideoManager() {
     try {
       const params = new URLSearchParams({ account_id: selectedAccountId });
       if (pageCursor !== null) params.set('cursor', String(pageCursor));
-      const response = await fetch(`/api/tiktok/videos?${params.toString()}`);
+      const response = await fetch(`/api/tiktok/videos?${params.toString()}`, {
+        signal: controller.signal,
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '读取 TikTok 视频失败');
       if (videoRequestRef.current !== requestId) return;
@@ -141,6 +147,7 @@ export function TikTokVideoManager() {
       setHasMore(data.has_more === true);
     } catch (fetchError) {
       if (videoRequestRef.current !== requestId) return;
+      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return;
       setError(fetchError instanceof Error ? fetchError.message : '读取 TikTok 视频失败');
     } finally {
       if (videoRequestRef.current === requestId) setLoadingVideos(false);
@@ -149,6 +156,10 @@ export function TikTokVideoManager() {
 
   useEffect(() => {
     void loadVideos(null, false);
+    return () => {
+      videoRequestRef.current += 1;
+      videoAbortRef.current?.abort();
+    };
   }, [loadVideos]);
 
   return (

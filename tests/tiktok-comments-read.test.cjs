@@ -500,6 +500,35 @@ test('TikTok comment reads delegate through the closed broker operation when con
   assert.equal(calls[0][2].externalContentId, 'video-1')
 })
 
+test('comment broker failures preserve only bounded metadata and never expose the remote message', async () => {
+  const secret = 'access_token=secret-token internal-host=db.private'
+  const api = loadPlatformApi(
+    async () => { throw new Error('direct fetch should not run') },
+    {
+      enabled: true,
+      call: async () => {
+        const error = new Error(secret)
+        error.code = `invalid ${secret}`
+        error.httpStatus = 200
+        error.retryAfter = secret
+        throw error
+      },
+    },
+  )
+
+  await assert.rejects(
+    () => api.listTikTokComments(token, 'video-1'),
+    (error) => {
+      assert.equal(error.code, 'provider_error')
+      assert.equal(error.message, 'tiktok comment request failed.')
+      assert.equal(error.httpStatus, 500)
+      assert.equal(error.retryAfter, null)
+      assert.equal(error.message.includes(secret), false)
+      return true
+    },
+  )
+})
+
 test('TikTok replies remain fail-closed unless the Stage 6 rollout flag is enabled', () => {
   const capabilities = loadTsModule(
     path.join(process.cwd(), 'src/lib/social-comments/platform-capabilities.ts'),
@@ -1749,6 +1778,46 @@ test('provider success followed by local failure resumes the same receipt withou
   assert.equal(state.providerCalls, 1)
   assert.equal(state.finalizeCalls, 2)
   assert.equal(state.actionLogs[0].status, 'completed')
+})
+
+test('reusing a TikTok reply idempotency key with different text is a conflict and never reaches the provider', async () => {
+  const { service, state } = createReplyServiceHarness()
+  const options = { enabledPlatforms: ['tiktok'], tiktokReplyEnabled: true }
+
+  const saved = await service.replyToSocialComment(
+    'user-1',
+    'parent-row',
+    'Manual reply',
+    'message-bound-key-123',
+    options,
+  )
+  assert.equal(saved.id, 'saved-reply')
+  assert.equal(state.providerCalls, 1)
+
+  await assert.rejects(
+    () => service.replyToSocialComment(
+      'user-1',
+      'parent-row',
+      'Different reply text',
+      'message-bound-key-123',
+      options,
+    ),
+    (error) => error.code === 'idempotency_key_conflict' && error.httpStatus === 409,
+  )
+  assert.equal(state.providerCalls, 1)
+  assert.equal(state.actionLogs.length, 1)
+})
+
+test('unexpected comment service errors use the public fallback instead of leaking internal details', () => {
+  const { service } = createReplyServiceHarness()
+  const mapped = service.mapSocialCommentError(
+    new Error('password=secret host=internal-db.example'),
+    'Reply failed.',
+  )
+
+  assert.equal(mapped.code, 'internal_error')
+  assert.equal(mapped.message, 'Reply failed.')
+  assert.equal(mapped.status, 500)
 })
 
 test('a transient provider-receipt log failure is retried as sent and never repeats the provider write', async () => {

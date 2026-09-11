@@ -960,6 +960,8 @@ export interface Database {
           account_type: string;
           token_write_fence: string | null;
           business_comment_auth_generation: string;
+          publishing_disconnect_completed_at: string | null;
+          publishing_disconnect_method: string | null;
           status: string;
           created_at: string;
           updated_at: string;
@@ -988,6 +990,8 @@ export interface Database {
           account_type?: string;
           token_write_fence?: string | null;
           business_comment_auth_generation?: string;
+          publishing_disconnect_completed_at?: string | null;
+          publishing_disconnect_method?: string | null;
           status?: string;
           username?: string | null;
         };
@@ -1012,6 +1016,8 @@ export interface Database {
           account_type?: string;
           token_write_fence?: string | null;
           business_comment_auth_generation?: string;
+          publishing_disconnect_completed_at?: string | null;
+          publishing_disconnect_method?: string | null;
           status?: string;
           username?: string | null;
         };
@@ -1040,6 +1046,13 @@ export interface Database {
           refresh_token_expires_at: string | null;
           refresh_lease_token: string | null;
           refresh_lease_expires_at: string | null;
+          revocation_status: string;
+          revocation_token: string | null;
+          revocation_started_at: string | null;
+          revocation_lease_expires_at: string | null;
+          revocation_error_code: string | null;
+          revocation_error_message: string | null;
+          revocation_manual_confirmation: boolean;
           managed_writes_only: boolean;
           compatibility_write_key: string;
           created_at: string;
@@ -1053,6 +1066,13 @@ export interface Database {
           refresh_token_expires_at?: string | null;
           refresh_lease_token?: string | null;
           refresh_lease_expires_at?: string | null;
+          revocation_status?: string;
+          revocation_token?: string | null;
+          revocation_started_at?: string | null;
+          revocation_lease_expires_at?: string | null;
+          revocation_error_code?: string | null;
+          revocation_error_message?: string | null;
+          revocation_manual_confirmation?: boolean;
           managed_writes_only?: boolean;
           compatibility_write_key?: string;
           created_at?: string;
@@ -1065,6 +1085,13 @@ export interface Database {
           refresh_token_expires_at?: string | null;
           refresh_lease_token?: string | null;
           refresh_lease_expires_at?: string | null;
+          revocation_status?: string;
+          revocation_token?: string | null;
+          revocation_started_at?: string | null;
+          revocation_lease_expires_at?: string | null;
+          revocation_error_code?: string | null;
+          revocation_error_message?: string | null;
+          revocation_manual_confirmation?: boolean;
           managed_writes_only?: boolean;
           compatibility_write_key?: string;
           updated_at?: string;
@@ -1142,6 +1169,8 @@ export interface Database {
           credential_generation: string;
           refresh_lease_token: string | null;
           refresh_lease_expires_at: string | null;
+          reply_dispatch_lease_token: string | null;
+          reply_dispatch_lease_expires_at: string | null;
           revocation_token: string | null;
           revocation_started_at: string | null;
           revocation_lease_expires_at: string | null;
@@ -1162,6 +1191,8 @@ export interface Database {
           credential_generation?: string;
           refresh_lease_token?: string | null;
           refresh_lease_expires_at?: string | null;
+          reply_dispatch_lease_token?: string | null;
+          reply_dispatch_lease_expires_at?: string | null;
           revocation_token?: string | null;
           revocation_started_at?: string | null;
           revocation_lease_expires_at?: string | null;
@@ -1181,6 +1212,8 @@ export interface Database {
           credential_generation?: string;
           refresh_lease_token?: string | null;
           refresh_lease_expires_at?: string | null;
+          reply_dispatch_lease_token?: string | null;
+          reply_dispatch_lease_expires_at?: string | null;
           revocation_token?: string | null;
           revocation_started_at?: string | null;
           revocation_lease_expires_at?: string | null;
@@ -2073,6 +2106,43 @@ export interface Database {
           p_error_message: string;
         };
         Returns: boolean;
+      };
+      begin_tiktok_account_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+          p_lease_seconds?: number;
+          p_manual_confirmation?: boolean;
+        };
+        Returns: {
+          access_token: string;
+          previous_error_code: string | null;
+        }[];
+      };
+      complete_tiktok_account_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+        };
+        Returns: boolean;
+      };
+      defer_tiktok_account_revocation: {
+        Args: {
+          p_account_id: string;
+          p_user_id: string;
+          p_revocation_token: string;
+          p_error_code: string;
+          p_error_message: string;
+        };
+        Returns: boolean;
+      };
+      delete_tiktok_user_data: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: Json;
       };
       claim_tiktok_token_refresh: {
         Args: {

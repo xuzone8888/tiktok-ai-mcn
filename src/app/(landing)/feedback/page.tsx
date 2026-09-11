@@ -50,7 +50,7 @@ export default function FeedbackPage() {
                 ? `Feedback Type: ${typeLabel(feedbackType)}\n\nDescription:\n${description}\n\nContact Email: ${contactEmail || "Not provided"}`
                 : `反馈类型：${feedbackType}\n\n问题描述：\n${description}\n\n联系邮箱：${contactEmail || "未提供"}`
         );
-        const mailtoLink = `mailto:toryxai@outlook.com?subject=${subject}&body=${body}`;
+        const mailtoLink = `mailto:developer@toryxai.com?subject=${subject}&body=${body}`;
 
         window.open(mailtoLink, "_blank");
 

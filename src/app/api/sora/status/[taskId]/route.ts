@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 // GET: 查询任务状态 — 已废弃
 export async function GET(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   return NextResponse.json(
     { error: "此接口已废弃，请使用新版批量视频状态查询接口" },
@@ -22,7 +22,7 @@ export async function GET(
 // DELETE: 取消任务 — 已废弃
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { taskId: string } }
+  { params }: { params: Promise<{ taskId: string }> }
 ) {
   return NextResponse.json(
     { error: "此接口已废弃" },

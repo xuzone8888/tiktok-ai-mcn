@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -74,6 +76,6 @@ test('uses a TikTok-appropriate glyph for the TikTok terms heading', () => {
   const terms = read('src/app/(landing)/terms/page.tsx')
   assert.match(
     terms,
-    /TikTok Platform Integration Terms[\s\S]*?<TikTokLogo className="h-6 w-6"/,
+    /TikTok Platform Integration Terms[\s\S]*?<TikTokLogo className="h-7 w-7 text-white"/,
   )
 })

@@ -77,6 +77,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             .select('id, token_expires_at')
             .eq('user_id', user.id)
             .eq('account_type', 'normal')
+            .eq('status', 'active')
             .in('id', accountIds)
 
         if (accountsError) {

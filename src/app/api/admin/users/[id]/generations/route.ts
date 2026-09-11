@@ -13,13 +13,13 @@ const supabase = createClient(
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const auth = await requireAdmin();
         if (auth.error) return auth.error;
 
-        const userId = params.id;
+        const { id: userId } = await params;
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "20");

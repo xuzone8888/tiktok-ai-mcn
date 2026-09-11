@@ -1,12 +1,15 @@
 import { notFound } from "next/navigation"
 
-import { isSocialCommentsCenterEnabled } from "@/lib/social-comments/feature-flag"
 import SocialCommentsClient from "@/components/social-comments/SocialCommentsClient"
+import {
+  isSocialCommentsCenterEnabled,
+  isTikTokCommentsReplyEnabled,
+} from "@/lib/social-comments/feature-flag"
 
 export default function SocialCommentsPage() {
   if (!isSocialCommentsCenterEnabled()) {
     notFound()
   }
 
-  return <SocialCommentsClient />
+  return <SocialCommentsClient tiktokReplyEnabled={isTikTokCommentsReplyEnabled()} />
 }

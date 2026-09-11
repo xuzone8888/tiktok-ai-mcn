@@ -196,7 +196,7 @@ function mapApiError(error: unknown, fallbackMessage: string) {
 
   return {
     code: 'internal_error',
-    message: error instanceof Error ? error.message : fallbackMessage,
+    message: fallbackMessage,
     status: 500,
     unsupported: false,
     retryable: false,
@@ -546,11 +546,10 @@ async function getPlatformToken(userId: string, platform: SocialPlatform, accoun
         error.retryable,
       )
     }
-    const message = error instanceof Error ? error.message : 'TikTok comment authorization failed.'
     throw new SocialCommentApiError(
       'tiktok',
       'missing_comment_authorization',
-      message,
+      'TikTok comment authorization failed.',
       403,
     )
   }
@@ -577,6 +576,7 @@ export async function getSocialCommentAccounts(
         .select('id, open_id, username, display_name, avatar_url, status, scopes')
         .eq('user_id', userId)
         .eq('account_type', 'normal')
+        .eq('status', 'active')
         .order('created_at', { ascending: false })
       : emptyResult,
     enabled.has('instagram')
@@ -1935,12 +1935,17 @@ async function startReplyActionLog(
     }
     const existingProviderTarget = existing?.metadata?.parent_external_comment_id || existing.external_comment_id
     const requestedProviderTarget = comment.parent_external_comment_id || comment.external_comment_id
+    const requestedMessageHash = replyMessageHash(replyMessage)
+    const existingMessageHash = typeof existing?.metadata?.reply_message_hash === 'string'
+      ? existing.metadata.reply_message_hash
+      : ''
     if (
       existing.platform !== comment.platform
       || existing.account_id !== comment.account_id
       || existingProviderTarget !== requestedProviderTarget
+      || existingMessageHash !== requestedMessageHash
     ) {
-      throw new SocialCommentApiError(comment.platform, 'idempotency_key_conflict', 'This idempotency key was already used for another reply target.', 409)
+      throw new SocialCommentApiError(comment.platform, 'idempotency_key_conflict', 'This idempotency key was already used for another reply request.', 409)
     }
 
     if (existing.status === 'sent' || existing.status === 'completed') {
@@ -1982,7 +1987,7 @@ async function startReplyActionLog(
           metadata: mergeActionLogMetadata(existing.metadata, {
             comment_id: comment.id,
             parent_external_comment_id: comment.parent_external_comment_id || comment.external_comment_id,
-            reply_message_hash: replyMessageHash(replyMessage),
+            reply_message_hash: requestedMessageHash,
             reply_attempt_token: replyAttemptToken,
             provider_dispatch_started_at: null,
             restarted_at: new Date().toISOString(),

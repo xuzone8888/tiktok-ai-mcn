@@ -113,14 +113,27 @@ async function callCommentBroker<T>(
           providerWriteOutcome?: unknown
         }
       : null
-    const httpStatus = typeof brokerError?.httpStatus === 'number' ? brokerError.httpStatus : 500
+    const brokerCode = typeof brokerError?.code === 'string'
+      && /^[A-Za-z0-9_.:-]{1,80}$/.test(brokerError.code)
+      ? brokerError.code
+      : 'provider_error'
+    const httpStatus = typeof brokerError?.httpStatus === 'number'
+      && Number.isInteger(brokerError.httpStatus)
+      && brokerError.httpStatus >= 400
+      && brokerError.httpStatus <= 599
+      ? brokerError.httpStatus
+      : 500
+    const retryAfter = typeof brokerError?.retryAfter === 'string'
+      && /^\d{1,10}$/.test(brokerError.retryAfter)
+      ? brokerError.retryAfter
+      : null
     throw new SocialCommentApiError(
       platform,
-      typeof brokerError?.code === 'string' && brokerError.code ? brokerError.code : 'provider_error',
-      error instanceof Error ? error.message : `${platform} comment request failed.`,
+      brokerCode,
+      `${platform} comment request failed.`,
       httpStatus,
       brokerError?.retryable === true,
-      typeof brokerError?.retryAfter === 'string' ? brokerError.retryAfter : null,
+      retryAfter,
       brokerError?.providerWriteOutcome === 'rejected' || brokerError?.providerWriteOutcome === 'unknown'
         ? brokerError.providerWriteOutcome
         : null,

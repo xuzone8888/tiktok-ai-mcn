@@ -166,7 +166,7 @@ export default function LegalPage() {
                     <li>{lang === "en" ? "Provide your contact information" : "提供您的联系方式"}</li>
                     <li>{lang === "en" ? "Sign a commitment letter guaranteeing the authenticity of the complaint" : "签署承诺书，保证投诉内容的真实性"}</li>
                   </ul>
-                  <p className="leading-relaxed mt-4">{lang === "en" ? "Please send the above materials to: " : "请将上述材料发送至："}<span className="text-cyan-400">toryxai@outlook.com</span></p>
+                  <p className="leading-relaxed mt-4">{lang === "en" ? "Please send the above materials to: " : "请将上述材料发送至："}<span className="text-cyan-400">developer@toryxai.com</span></p>
                   <p className="leading-relaxed mt-3">{lang === "en" ? 'We will process valid complaints as soon as possible and respond within the time limit stipulated by law.' : '我们将在收到有效投诉后尽快处理，并在法律规定的时限内给予答复。'}</p>
                 </div>
               </div>
@@ -189,7 +189,7 @@ export default function LegalPage() {
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Contact Email" : "联系邮箱"}</p>
-                      <p className="text-white">toryxai@outlook.com</p>
+                      <p className="text-white">developer@toryxai.com</p>
                     </div>
                     <div>
                       <p className="text-gray-400 text-sm">{lang === "en" ? "Website" : "网站"}</p>

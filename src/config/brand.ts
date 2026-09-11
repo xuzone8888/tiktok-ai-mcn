@@ -31,7 +31,7 @@ export const APP_BRAND = {
   appUrl: 'https://toryxai.com',
 
   /** Contact email */
-  contactEmail: 'toryxai@outlook.com',
+  contactEmail: 'developer@toryxai.com',
 } as const
 
 export type Lang = 'zh' | 'en'

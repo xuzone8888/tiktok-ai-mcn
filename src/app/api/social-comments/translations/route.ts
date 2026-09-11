@@ -46,9 +46,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Comment translation failed.'
     const unavailable = message === 'Comment translation is not configured.' || message === 'Comment translation timed out.'
-    console.error('Social comment translation API error:', { name: error instanceof Error ? error.name : 'Error', message })
+    const publicMessage = unavailable ? message : 'Comment translation failed.'
+    console.error('Social comment translation API error:', {
+      name: error instanceof Error ? error.name : 'Error',
+      code: unavailable ? 'translation_unavailable' : 'translation_failed',
+    })
     return NextResponse.json(
-      { error: getApiMessage('translation_failed', message, lang), code: unavailable ? 'translation_unavailable' : 'translation_failed' },
+      { error: getApiMessage('translation_failed', publicMessage, lang), code: unavailable ? 'translation_unavailable' : 'translation_failed' },
       { status: unavailable ? 503 : 500 }
     )
   }

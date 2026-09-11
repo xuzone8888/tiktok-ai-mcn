@@ -1,6 +1,9 @@
 const TIKTOK_VIDEO_LIST_URL = 'https://open.tiktokapis.com/v2/video/list/';
 const TIKTOK_VIDEO_QUERY_URL = 'https://open.tiktokapis.com/v2/video/query/';
 const TIKTOK_VIDEO_TIMEOUT_MS = 20_000;
+const TIKTOK_VIDEO_ID_MAX_LENGTH = 256;
+const TIKTOK_ERROR_CODE_MAX_LENGTH = 96;
+const TIKTOK_LOG_ID_MAX_LENGTH = 128;
 export const TIKTOK_VIDEO_BATCH_SIZE = 20;
 export const TIKTOK_VIDEO_LIST_SCOPE = 'video.list';
 
@@ -71,10 +74,59 @@ function countValue(value: unknown) {
         : null;
 }
 
+function boundedIdentifier(value: unknown, maxLength: number) {
+    if (typeof value !== 'string' || value.length < 1 || value.length > maxLength) return null;
+    return /^[A-Za-z0-9._:-]+$/.test(value) ? value : null;
+}
+
+function normalizeVideoId(value: unknown) {
+    if (typeof value !== 'string') return null;
+    const id = value.trim();
+    if (!id || id.length > TIKTOK_VIDEO_ID_MAX_LENGTH || /[\u0000-\u001f\u007f]/.test(id)) return null;
+    return id;
+}
+
+function safeHttpsUrl(value: unknown, allowedHost?: (hostname: string) => boolean) {
+    if (typeof value !== 'string' || value.length > 4096) return null;
+    try {
+        const url = new URL(value);
+        if (
+            url.protocol !== 'https:'
+            || url.username
+            || url.password
+            || (allowedHost && !allowedHost(url.hostname.toLowerCase()))
+        ) {
+            return null;
+        }
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
+
+function isTikTokShareHost(hostname: string) {
+    return hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com');
+}
+
+function optionalText(value: unknown) {
+    return typeof value === 'string' && value.length <= 10_000 ? value : null;
+}
+
+function videosFromEnvelope(payload: TikTokVideoApiEnvelope) {
+    if (!payload.data || !Array.isArray(payload.data.videos)) {
+        throw new TikTokVideoApiError(
+            'tiktok_video_invalid_response',
+            'TikTok returned an invalid response'
+        );
+    }
+    return payload.data.videos;
+}
+
 function normalizeVideo(value: unknown): TikTokVideo | null {
     if (!value || typeof value !== 'object') return null;
     const row = value as Record<string, unknown>;
-    if (typeof row.id !== 'string' || !row.id) return null;
+    const id = normalizeVideoId(row.id);
+    if (!id) return null;
     const likeCount = countValue(row.like_count);
     const commentCount = countValue(row.comment_count);
     const shareCount = countValue(row.share_count);
@@ -89,13 +141,13 @@ function normalizeVideo(value: unknown): TikTokVideo | null {
     }
 
     return {
-        id: row.id,
-        ...(typeof row.create_time === 'number' ? { create_time: row.create_time } : {}),
-        ...(typeof row.cover_image_url === 'string' ? { cover_image_url: row.cover_image_url } : {}),
-        ...(typeof row.share_url === 'string' ? { share_url: row.share_url } : {}),
-        ...(typeof row.video_description === 'string' ? { video_description: row.video_description } : {}),
-        ...(typeof row.duration === 'number' ? { duration: row.duration } : {}),
-        ...(typeof row.title === 'string' ? { title: row.title } : {}),
+        id,
+        ...(countValue(row.create_time) !== null ? { create_time: Number(row.create_time) } : {}),
+        ...(safeHttpsUrl(row.cover_image_url) ? { cover_image_url: safeHttpsUrl(row.cover_image_url)! } : {}),
+        ...(safeHttpsUrl(row.share_url, isTikTokShareHost) ? { share_url: safeHttpsUrl(row.share_url, isTikTokShareHost)! } : {}),
+        ...(optionalText(row.video_description) !== null ? { video_description: optionalText(row.video_description)! } : {}),
+        ...(countValue(row.duration) !== null ? { duration: Number(row.duration) } : {}),
+        ...(optionalText(row.title) !== null ? { title: optionalText(row.title)! } : {}),
         like_count: likeCount,
         comment_count: commentCount,
         share_count: shareCount,
@@ -129,10 +181,11 @@ async function postTikTokVideoApi(
     const payload = await response.json().catch(() => null) as TikTokVideoApiEnvelope | null;
     if (!response.ok) {
         throw new TikTokVideoApiError(
-            payload?.error?.code || `tiktok_video_http_${response.status}`,
+            boundedIdentifier(payload?.error?.code, TIKTOK_ERROR_CODE_MAX_LENGTH)
+                || `tiktok_video_http_${response.status}`,
             'TikTok video request failed',
             response.status,
-            payload?.error?.log_id
+            boundedIdentifier(payload?.error?.log_id, TIKTOK_LOG_ID_MAX_LENGTH)
         );
     }
     if (!payload) {
@@ -140,10 +193,11 @@ async function postTikTokVideoApi(
     }
     if (payload.error?.code !== 'ok') {
         throw new TikTokVideoApiError(
-            payload.error?.code || 'tiktok_video_invalid_response',
-            payload.error?.message || 'TikTok video request failed',
+            boundedIdentifier(payload.error?.code, TIKTOK_ERROR_CODE_MAX_LENGTH)
+                || 'tiktok_video_invalid_response',
+            'TikTok video request failed',
             502,
-            payload.error?.log_id
+            boundedIdentifier(payload.error?.log_id, TIKTOK_LOG_ID_MAX_LENGTH)
         );
     }
 
@@ -155,7 +209,7 @@ export function hasTikTokVideoListScope(scopes: unknown) {
 }
 
 export function chunkTikTokVideoIds(videoIds: string[]) {
-    const uniqueIds = [...new Set(videoIds.filter((id) => typeof id === 'string' && id))];
+    const uniqueIds = [...new Set(videoIds.map(normalizeVideoId).filter((id): id is string => Boolean(id)))];
     const batches: string[][] = [];
     for (let index = 0; index < uniqueIds.length; index += TIKTOK_VIDEO_BATCH_SIZE) {
         batches.push(uniqueIds.slice(index, index + TIKTOK_VIDEO_BATCH_SIZE));
@@ -194,7 +248,7 @@ export async function listTikTokVideos(
         ? cursor !== null
         : cursor !== null && cursor < options.cursor;
     return {
-        videos: (payload.data?.videos || []).map(normalizeVideo).filter((video): video is TikTokVideo => Boolean(video)),
+        videos: videosFromEnvelope(payload).map(normalizeVideo).filter((video): video is TikTokVideo => Boolean(video)),
         cursor,
         hasMore: payload.data?.has_more === true && cursorAdvanced,
     };
@@ -205,7 +259,11 @@ export async function queryTikTokVideoBatch(
     videoIds: string[]
 ): Promise<TikTokVideo[]> {
     const batches = chunkTikTokVideoIds(videoIds);
-    if (batches.length !== 1 || batches[0].length !== new Set(videoIds.filter(Boolean)).size) {
+    if (
+        !videoIds.every((id) => normalizeVideoId(id) !== null)
+        || batches.length !== 1
+        || batches[0].length > TIKTOK_VIDEO_BATCH_SIZE
+    ) {
         throw new TikTokVideoApiError(
             'invalid_video_batch',
             `TikTok video query accepts between 1 and ${TIKTOK_VIDEO_BATCH_SIZE} unique IDs`,
@@ -216,7 +274,7 @@ export async function queryTikTokVideoBatch(
     const payload = await postTikTokVideoApi(TIKTOK_VIDEO_QUERY_URL, accessToken, {
         filters: { video_ids: batches[0] },
     });
-    return (payload.data?.videos || [])
+    return videosFromEnvelope(payload)
         .map(normalizeVideo)
         .filter((video): video is TikTokVideo => Boolean(video));
 }

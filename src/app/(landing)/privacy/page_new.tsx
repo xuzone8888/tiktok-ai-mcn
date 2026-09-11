@@ -260,14 +260,14 @@ export default function PrivacyPage() {
                       {lang === "en" ? (
                         <>
                           <li>7.1 We retain personal data for as long as your account is active.</li>
-                          <li>7.2 After account deletion, data is removed within 30 days.</li>
-                          <li>7.3 Some data may be retained longer for legal or regulatory compliance.</li>
+                          <li>7.2 Valid deletion requests are verified and processed in accordance with applicable law and the relevant product controls.</li>
+                          <li>7.3 Records required for security, fraud prevention, legal compliance, dispute resolution, or other lawful purposes are retained only as necessary for those purposes.</li>
                         </>
                       ) : (
                         <>
                           <li>7.1 我们在您的账户活跃期间保留个人数据。</li>
-                          <li>7.2 账户删除后，数据将在 30 天内删除。</li>
-                          <li>7.3 某些数据可能因法律或监管合规要求而保留更长时间。</li>
+                          <li>7.2 有效的数据删除请求将依据适用法律及相应产品控制进行核验和处理。</li>
+                          <li>7.3 出于安全、防欺诈、法律合规、争议处理或其他合法目的所必需的记录，仅在实现该等目的所需期间内保留。</li>
                         </>
                       )}
                     </ul>
@@ -321,7 +321,7 @@ export default function PrivacyPage() {
                     {lang === "en" ? "Contact" : "联系方式"}
                   </h3>
                   <div className="space-y-2 text-sm text-gray-400">
-                    <p><span className="text-gray-500">{lang === "en" ? "Email: " : "邮箱："}</span>toryxai@outlook.com</p>
+                    <p><span className="text-gray-500">{lang === "en" ? "Email: " : "邮箱："}</span>developer@toryxai.com</p>
                   </div>
                 </div>
               </section>

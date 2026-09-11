@@ -23,7 +23,8 @@ import {
     Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import * as XLSX from "xlsx";
+import { readSheet, type SheetData as ReadSheetData } from "read-excel-file/browser";
+import writeXlsxFile, { type SheetData as WriteSheetData } from "write-excel-file/browser";
 
 // 从 store 导入类型
 import type { ExcelPromptRow } from "@/stores/image-batch-store";
@@ -42,113 +43,63 @@ interface ExcelUploaderProps {
 /**
  * 生成并下载 Excel 模板
  */
-function downloadTemplate() {
-    // 创建工作簿和工作表
-    const workbook = XLSX.utils.book_new();
-
+async function downloadTemplate() {
     // 模板数据（无表头，仅含示例数据）
-    const templateData = [
+    const templateData: WriteSheetData = [
         ["一只可爱的橘猫在阳光下打盹", 2],
         ["未来城市夜景，霓虹灯闪烁", 3],
         ["水墨画风格的山水画", 1],
     ];
 
-    // 创建工作表
-    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
-
-    // 设置列宽
-    worksheet["!cols"] = [
-        { wch: 50 }, // 提示词列宽
-        { wch: 10 }, // 数量列宽
-    ];
-
-    // 添加到工作簿
-    XLSX.utils.book_append_sheet(workbook, worksheet, "批量提示词");
-
-    // 导出文件
-    XLSX.writeFile(workbook, "批量制图模板.xlsx");
+    await writeXlsxFile(templateData, {
+        sheet: "批量提示词",
+        columns: [{ width: 50 }, { width: 10 }],
+    }).toFile("批量制图模板.xlsx");
 }
 
 /**
  * 解析上传的 Excel 文件
  */
 async function parseExcelFile(file: File): Promise<ExcelPromptRow[]> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
+    let rows: ReadSheetData;
+    try {
+        rows = await readSheet(file, 1);
+    } catch {
+        throw new Error("文件解析失败，请确保是有效的 .xlsx 文件");
+    }
 
-        reader.onload = (e) => {
-            try {
-                const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: "binary" });
+    const results: ExcelPromptRow[] = [];
+    const errors: string[] = [];
 
-                // 获取第一个工作表
-                const sheetName = workbook.SheetNames[0];
-                if (!sheetName) {
-                    reject(new Error("Excel 文件为空"));
-                    return;
-                }
+    rows.forEach((row, index) => {
+        if (!row || row.length === 0 || (!row[0] && !row[1])) return;
 
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData: unknown[][] = XLSX.utils.sheet_to_json(worksheet, {
-                    header: 1,
-                    defval: "",
-                });
+        const prompt = String(row[0] || "").trim();
+        const countRaw = row[1];
+        const count = typeof countRaw === "number" ? countRaw : parseInt(String(countRaw), 10);
 
-                // 解析数据（无表头）
-                const results: ExcelPromptRow[] = [];
-                const errors: string[] = [];
+        if (!prompt) {
+            errors.push(`第 ${index + 1} 行：提示词不能为空`);
+            return;
+        }
+        if (!Number.isInteger(count) || count < 1) {
+            errors.push(`第 ${index + 1} 行：数量必须是正整数`);
+            return;
+        }
+        if (count > 20) {
+            errors.push(`第 ${index + 1} 行：单行数量不能超过 20`);
+            return;
+        }
 
-                jsonData.forEach((row, index) => {
-                    // 跳过空行
-                    if (!row || row.length === 0 || (!row[0] && !row[1])) {
-                        return;
-                    }
-
-                    const prompt = String(row[0] || "").trim();
-                    const countRaw = row[1];
-                    const count = typeof countRaw === "number" ? countRaw : parseInt(String(countRaw), 10);
-
-                    // 验证
-                    if (!prompt) {
-                        errors.push(`第 ${index + 1} 行：提示词不能为空`);
-                        return;
-                    }
-
-                    if (isNaN(count) || count < 1) {
-                        errors.push(`第 ${index + 1} 行：数量必须是正整数`);
-                        return;
-                    }
-
-                    if (count > 20) {
-                        errors.push(`第 ${index + 1} 行：单行数量不能超过 20`);
-                        return;
-                    }
-
-                    results.push({ prompt, count });
-                });
-
-                if (errors.length > 0) {
-                    reject(new Error(errors.slice(0, 3).join("\n") + (errors.length > 3 ? `\n...还有 ${errors.length - 3} 个错误` : "")));
-                    return;
-                }
-
-                if (results.length === 0) {
-                    reject(new Error("未找到有效的提示词数据"));
-                    return;
-                }
-
-                resolve(results);
-            } catch (err) {
-                reject(new Error("文件解析失败，请确保是有效的 Excel 文件"));
-            }
-        };
-
-        reader.onerror = () => {
-            reject(new Error("文件读取失败"));
-        };
-
-        reader.readAsBinaryString(file);
+        results.push({ prompt, count });
     });
+
+    if (errors.length > 0) {
+        throw new Error(errors.slice(0, 3).join("\n") + (errors.length > 3 ? `\n...还有 ${errors.length - 3} 个错误` : ""));
+    }
+    if (results.length === 0) throw new Error("未找到有效的提示词数据");
+
+    return results;
 }
 
 export function ExcelUploader({
@@ -171,20 +122,16 @@ export function ExcelUploader({
             // 验证文件类型
             const validTypes = [
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.ms-excel",
-                ".xlsx",
-                ".xls",
             ];
             const isValidType =
                 validTypes.some((t) => file.type.includes(t)) ||
-                file.name.endsWith(".xlsx") ||
-                file.name.endsWith(".xls");
+                file.name.toLowerCase().endsWith(".xlsx");
 
             if (!isValidType) {
                 toast({
                     variant: "destructive",
                     title: "文件格式错误",
-                    description: "请上传 .xlsx 或 .xls 格式的 Excel 文件",
+                    description: "请上传 .xlsx 文件；旧版 .xls 请先另存为 .xlsx",
                 });
                 return;
             }
@@ -248,7 +195,7 @@ export function ExcelUploader({
                 {/* 上传 Excel */}
                 <input
                     type="file"
-                    accept=".xlsx,.xls"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={handleFileChange}
                     className="hidden"
                     ref={fileInputRef}

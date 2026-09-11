@@ -309,6 +309,7 @@ function normalAccount(id, overrides = {}) {
   return {
     id,
     account_type: 'normal',
+    status: 'active',
     access_token: `legacy-access-${id}`,
     refresh_token: `legacy-refresh-${id}`,
     access_token_expires_at: '2020-01-01T00:00:00.000Z',
@@ -1063,7 +1064,7 @@ test('ownership predicate rejects foreign and Shop accounts', () => {
   )
 })
 
-test('service-role token callers establish ownership/type before lookup and processor marks mismatches', () => {
+test('service-role token callers establish ownership/type and unsupported deletion never reads tokens', () => {
   const deleteRoute = fs.readFileSync(
     'src/app/api/publish/tasks/[id]/items/[itemId]/route.ts',
     'utf8'
@@ -1077,10 +1078,8 @@ test('service-role token callers establish ownership/type before lookup and proc
     'src/app/api/studio/photo-post/publish/route.ts',
   ]
 
-  const ownershipCheck = deleteRoute.indexOf(".eq('account_type', 'normal')")
-  const adminLookup = deleteRoute.indexOf('getValidTikTokAccessToken(')
-  assert.ok(ownershipCheck >= 0 && ownershipCheck < adminLookup)
-  assert.match(deleteRoute, /\.eq\('user_id', user\.id\)/)
+  assert.match(deleteRoute, /tiktok_remote_delete_unsupported/)
+  assert.doesNotMatch(deleteRoute, /createAdminClient|getValidTikTokAccessToken/)
   assert.match(processor, /isNormalTikTokAccountOwnedBy/)
   assert.match(processor, /ACCOUNT_OWNERSHIP_MISMATCH/)
 

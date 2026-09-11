@@ -28,6 +28,7 @@ function loadTsModule(filename, stubs = {}, globals = {}) {
     Number,
     Promise,
     Set,
+    URL,
     URLSearchParams,
     console,
     process,
@@ -116,6 +117,39 @@ test('video query chunks unique IDs into TikTok batches of at most 20', () => {
 
   assert.deepEqual(Array.from(batches, (batch) => batch.length), [20, 20, 5])
   assert.equal(new Set(batches.flat()).size, 45)
+})
+
+test('account profile refresh patches only statistics actually returned by TikTok', () => {
+  const binding = loadTsModule(
+    path.join(process.cwd(), 'src/lib/tiktok/account-binding.ts'),
+    {
+      '@/lib/tiktok/oauth': {},
+    }
+  )
+
+  assert.deepEqual(
+    { ...binding.buildTikTokCountPatch({
+      open_id: 'open-1',
+      follower_count: 12,
+      likes_count: 34,
+    }) },
+    { follower_count: 12, likes_count: 34 }
+  )
+  assert.deepEqual(
+    { ...binding.buildTikTokCountPatch({
+      open_id: 'open-1',
+      follower_count: -1,
+      video_count: Number.MAX_SAFE_INTEGER + 1,
+    }) },
+    {}
+  )
+
+  const refreshRoute = fs.readFileSync(
+    'src/app/api/publish/accounts/[id]/refresh/route.ts',
+    'utf8'
+  )
+  assert.match(refreshRoute, /\.\.\.buildTikTokCountPatch\(userInfo\)/)
+  assert.doesNotMatch(refreshRoute, /follower_count:\s*safeTikTokCount/)
 })
 
 test('video list sends a bearer request, caps pages at 20, and keeps pagination', async () => {
@@ -276,6 +310,8 @@ test('video query rejects more than 20 IDs before calling TikTok', async () => {
 function createSyncRouteHarness(items, queryTikTokVideoBatch) {
   const task = { id: 'task-1', user_id: 'user-1', items }
   const state = new Map(items.map((item) => [item.id, {
+    account_id: item.account.id,
+    tiktok_video_id: item.tiktok_video_id,
     view_count: item.view_count,
     like_count: item.like_count,
   }]))
@@ -287,7 +323,17 @@ function createSyncRouteHarness(items, queryTikTokVideoBatch) {
       const result = rpcQueue.then(() => {
         rpcCalls.push(args)
         for (const update of args.p_updates) {
+          const current = state.get(update.item_id)
+          if (
+            !current
+            || current.account_id !== update.account_id
+            || current.tiktok_video_id !== update.tiktok_video_id
+          ) {
+            return { data: null, error: { code: '23514' } }
+          }
           state.set(update.item_id, {
+            account_id: current.account_id,
+            tiktok_video_id: current.tiktok_video_id,
             view_count: update.view_count,
             like_count: update.like_count,
           })
@@ -362,6 +408,12 @@ function createSyncRouteHarness(items, queryTikTokVideoBatch) {
         queryTikTokVideoBatch,
         TikTokVideoApiError: class TikTokVideoApiError extends Error {},
       },
+    },
+    {
+      process: {
+        ...process,
+        env: { ...process.env, ENABLE_VIDEO_STATS_SYNC: 'true' },
+      },
     }
   )
   return {
@@ -369,6 +421,14 @@ function createSyncRouteHarness(items, queryTikTokVideoBatch) {
     rpcCalls,
     state,
     getTaskTotals: () => taskTotals,
+    rebindItem(itemId, accountId, videoId) {
+      const current = state.get(itemId)
+      state.set(itemId, {
+        ...current,
+        account_id: accountId,
+        tiktok_video_id: videoId,
+      })
+    },
   }
 }
 
@@ -384,6 +444,7 @@ function publishedItem(id, videoId, views, likes) {
       open_id: 'open-account-1',
       user_id: 'user-1',
       account_type: 'normal',
+      status: 'active',
       scopes: ['video.list'],
     },
   }
@@ -411,8 +472,82 @@ test('stats sync atomically applies only provider-returned videos and aggregates
   assert.equal(harness.getTaskTotals().total_views, 150)
   assert.equal(harness.getTaskTotals().total_likes, 15)
   assert.equal(harness.rpcCalls[0].p_updates.length, 1)
+  assert.equal(harness.rpcCalls[0].p_updates[0].account_id, 'account-1')
+  assert.equal(harness.rpcCalls[0].p_updates[0].tiktok_video_id, 'video-1')
   assert.equal(response.body.errors.some((error) => error.includes('video-2')), true)
   assert.equal(response.body.errors.some((error) => error.includes('video-3')), true)
+})
+
+test('stats sync rejects a stale provider response after an item video binding changes', async () => {
+  let releaseQuery
+  const queryBlocked = new Promise((resolve) => {
+    releaseQuery = resolve
+  })
+  const harness = createSyncRouteHarness([
+    publishedItem('item-1', 'video-1', 10, 1),
+  ], async () => {
+    await queryBlocked
+    return [{
+      id: 'video-1',
+      view_count: 999,
+      like_count: 99,
+      comment_count: 9,
+      share_count: 9,
+    }]
+  })
+
+  const pending = harness.route.POST({}, { params: Promise.resolve({ id: 'task-1' }) })
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  harness.rebindItem('item-1', 'account-1', 'video-2')
+  releaseQuery()
+
+  const response = await pending
+  assert.equal(response.status, 500)
+  assert.equal(response.body.synced, 0)
+  assert.equal(harness.state.get('item-1').tiktok_video_id, 'video-2')
+  assert.equal(harness.state.get('item-1').view_count, 10)
+})
+
+test('video normalization drops unsafe URLs and provider error text', async () => {
+  const responses = [{
+    data: {
+      videos: [{
+        id: 'video-1',
+        cover_image_url: 'javascript:alert(1)',
+        share_url: 'https://attacker.example/video-1',
+        view_count: 1,
+        like_count: 2,
+        comment_count: 3,
+        share_count: 4,
+      }],
+      cursor: 1,
+      has_more: false,
+    },
+    error: { code: 'ok' },
+  }, {
+    data: {},
+    error: {
+      code: 'scope_not_authorized',
+      message: 'raw provider details must not reach the client',
+      log_id: 'log-safe-1',
+    },
+  }]
+  const api = loadVideoApi(async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return responses.shift()
+    },
+  }))
+
+  const page = await api.listTikTokVideos('access-token')
+  assert.equal(page.videos[0].cover_image_url, undefined)
+  assert.equal(page.videos[0].share_url, undefined)
+  await assert.rejects(
+    api.listTikTokVideos('access-token'),
+    (error) => error.message === 'TikTok video request failed'
+      && !error.message.includes('raw provider details')
+  )
 })
 
 test('concurrent partial syncs cannot overwrite totals with an initial stale snapshot', async () => {
@@ -513,6 +648,102 @@ test('video list server gate stops before auth, admin, token, or provider access
   assert.deepEqual(calls, { auth: 0, admin: 0, token: 0, provider: 0 })
 })
 
+test('task video stats sync is fail-closed unless its server flag is exactly true', () => {
+  const sync = fs.readFileSync(
+    'src/app/api/publish/tasks/[id]/sync-stats/route.ts',
+    'utf8'
+  )
+  assert.match(sync, /process\.env\.ENABLE_VIDEO_STATS_SYNC !== 'true'/)
+  assert.doesNotMatch(sync, /ENABLE_VIDEO_STATS_SYNC === 'false'/)
+})
+
+test('legacy remote-delete requests fail before token, provider, or local deletion', async () => {
+  const calls = { delete: 0, from: [] }
+  const item = {
+    id: 'item-1',
+    task_id: 'task-1',
+    account_id: 'account-1',
+    status: 'published',
+    error_code: null,
+    tiktok_publish_id: 'publish-1',
+    tiktok_transfer_method: 'FILE_UPLOAD',
+    tiktok_upload_outcome: 'accepted',
+    publish_init_started_at: '2026-09-09T00:00:00.000Z',
+    tiktok_share_id: 'video-1',
+    publish_tasks: { user_id: 'user-1' },
+  }
+  class Query {
+    select() { return this }
+    eq() { return this }
+    delete() {
+      calls.delete += 1
+      return this
+    }
+    async single() { return { data: item, error: null } }
+  }
+  const route = loadTsModule(
+    path.join(process.cwd(), 'src/app/api/publish/tasks/[id]/items/[itemId]/route.ts'),
+    {
+      'next/server': {
+        NextResponse: {
+          json(body, init = {}) {
+            return { body, status: init.status || 200 }
+          },
+        },
+      },
+      '@/lib/supabase/server': {
+        async createClient() {
+          return {
+            auth: {
+              async getUser() {
+                return { data: { user: { id: 'user-1' } }, error: null }
+              },
+            },
+            from(table) {
+              calls.from.push(table)
+              return new Query()
+            },
+          }
+        },
+      },
+    }
+  )
+
+  const response = await route.DELETE(
+    { async json() { return { deleteTikTokVideo: true } } },
+    { params: Promise.resolve({ id: 'task-1', itemId: 'item-1' }) }
+  )
+
+  assert.equal(response.status, 400)
+  assert.equal(response.body.code, 'tiktok_remote_delete_unsupported')
+  assert.equal(calls.delete, 0)
+  assert.deepEqual(calls.from, ['publish_task_items'])
+})
+
+test('task detail pagination is not reset by page fetches and failures remain visible', () => {
+  const detail = fs.readFileSync('src/components/publish/TaskGroupDetail.tsx', 'utf8')
+  const manager = fs.readFileSync('src/components/publish/TaskManager.tsx', 'utf8')
+  const deletionRoute = fs.readFileSync(
+    'src/app/api/publish/tasks/[id]/items/[itemId]/route.ts',
+    'utf8'
+  )
+  const posting = fs.readFileSync('src/lib/tiktok/content-posting.ts', 'utf8')
+
+  assert.doesNotMatch(detail, /\[open, task, fetchItems\]/)
+  assert.match(detail, /setStatusFilter\(value\)[\s\S]*setPage\(1\)/)
+  assert.match(detail, /itemsRequestRef\.current !== requestId/)
+  assert.match(detail, /itemsAbortRef\.current\?\.abort\(\)/)
+  assert.match(detail, /setSyncError\(error instanceof Error/)
+  assert.match(detail, /syncRequestRef\.current !== requestId/)
+  assert.match(detail, /syncAbortRef\.current\?\.abort\(\)/)
+  assert.match(detail, /\{syncError \|\| syncWarning\}/)
+  assert.doesNotMatch(detail, /syncDeleteTikTok|\u540c\u65f6\u4ece TikTok \u5220\u9664/)
+  assert.match(manager, /await fetchTasks\(true\)/)
+  assert.doesNotMatch(manager, /published_count:\s*deleteTikTokVideo/)
+  assert.match(deletionRoute, /tiktok_remote_delete_unsupported/)
+  assert.doesNotMatch(posting, /\/v2\/video\/delete\//)
+})
+
 test('video list UI gate hides reauthorization prompts while preserving TaskManager', () => {
   const rollout = loadTsModule(
     path.join(process.cwd(), 'src/lib/tiktok/video-list-rollout.ts')
@@ -545,7 +776,7 @@ test('video list route validates ownership, normal type, status, and scope befor
   const manager = fs.readFileSync('src/components/publish/tiktok/TikTokVideoManager.tsx', 'utf8')
   const sync = fs.readFileSync('src/app/api/publish/tasks/[id]/sync-stats/route.ts', 'utf8')
   const atomicMigration = fs.readFileSync(
-    'supabase/migrations/20260724_tiktok_video_stats_atomic.sql',
+    'supabase/migrations/20260909_tiktok_video_data_hardening.sql',
     'utf8'
   )
 
@@ -563,9 +794,15 @@ test('video list route validates ownership, normal type, status, and scope befor
   assert.doesNotMatch(sync, /fetch\(\s*['"`]https:\/\/open\.tiktokapis\.com/)
   assert.match(sync, /queryTikTokVideoBatch/)
   assert.match(sync, /apply_tiktok_task_video_stats/)
+  assert.match(sync, /account_id: account\.id/)
+  assert.match(sync, /tiktok_video_id: item\.tiktok_video_id/)
   assert.doesNotMatch(sync, /currentStats/)
   assert.match(atomicMigration, /FROM public\.publish_tasks[\s\S]*FOR UPDATE/)
+  assert.match(atomicMigration, /task_owner IS DISTINCT FROM p_user_id/)
+  assert.doesNotMatch(atomicMigration, /task_owner <> p_user_id/)
   assert.match(atomicMigration, /UPDATE public\.publish_task_items/)
+  assert.match(atomicMigration, /item\.account_id = update_row\.account_id/)
+  assert.match(atomicMigration, /item\.tiktok_video_id = update_row\.tiktok_video_id/)
   assert.match(atomicMigration, /SUM\(item\.view_count\)/)
   assert.match(atomicMigration, /REVOKE ALL ON FUNCTION[\s\S]*FROM authenticated/)
 })

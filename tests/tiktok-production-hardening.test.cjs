@@ -47,7 +47,7 @@ test('TikTok production gates remain closed without requiring comment credential
   assert.equal(result.ok, true)
   assert.deepEqual(result.errors, [])
   assert.ok(result.warnings.some((warning) => (
-    warning.includes('20260908') && warning.includes('PostgREST schema cache')
+    warning.includes('20260909') && warning.includes('20260911') && warning.includes('PostgREST schema cache')
   )))
 })
 
@@ -64,6 +64,7 @@ test('TikTok video-list scope and UI rollout gates fail closed and must match', 
     {
       TIKTOK_VIDEO_LIST_SCOPE_ENABLED: 'true',
       NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED: 'true',
+      ENABLE_VIDEO_STATS_SYNC: 'true',
     },
   ]) {
     assert.equal(
@@ -76,6 +77,8 @@ test('TikTok video-list scope and UI rollout gates fail closed and must match', 
   for (const overrides of [
     { TIKTOK_VIDEO_LIST_SCOPE_ENABLED: 'true' },
     { NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED: 'true' },
+    { ENABLE_VIDEO_STATS_SYNC: 'true' },
+    { ENABLE_VIDEO_STATS_SYNC: 'TRUE' },
     {
       TIKTOK_VIDEO_LIST_SCOPE_ENABLED: 'TRUE',
       NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED: 'false',
@@ -121,6 +124,7 @@ test('TikTok video-list scope and UI rollout gates fail closed and must match', 
     const template = fs.readFileSync(filename, 'utf8')
     assert.match(template, /TIKTOK_VIDEO_LIST_SCOPE_ENABLED=false/)
     assert.match(template, /NEXT_PUBLIC_TIKTOK_VIDEO_LIST_ENABLED=false/)
+    assert.match(template, /ENABLE_VIDEO_STATS_SYNC=false/)
   }
 })
 
@@ -895,6 +899,8 @@ test('production runbook locks rollout, rollback, real PostgreSQL, and webhook d
   const brokerCompose = fs.readFileSync('docker-compose.broker.yml', 'utf8')
 
   assert.match(runbook, /20260723[\s\S]*20260724[\s\S]*20260725[\s\S]*20260726[\s\S]*20260727/)
+  assert.match(runbook, /20260908[\s\S]*20260909_tiktok_account_disconnect[\s\S]*20260909_tiktok_video_data[\s\S]*20260911/)
+  assert.match(runbook, /delete_tiktok_user_data\(uuid\)/)
   assert.match(runbook, /flag-first and non-destructive/)
   assert.match(runbook, /real PostgreSQL staging run remains mandatory/)
   assert.match(runbook, /Do not enable comment webhooks in this release/)

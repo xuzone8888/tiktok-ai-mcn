@@ -1,18 +1,20 @@
 import Link from 'next/link'
 
 import { FacebookBrandIcon } from '@/components/brand/FacebookBrandIcon'
+import { APP_BRAND } from '@/config/brand'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
 interface FacebookDataDeletionPageProps {
-  searchParams: { code?: string }
+  searchParams: Promise<{ code?: string }>
 }
 
 export default async function FacebookDataDeletionPage({
   searchParams,
 }: FacebookDataDeletionPageProps) {
-  const code = typeof searchParams.code === 'string' ? searchParams.code.trim() : ''
+  const resolvedSearchParams = await searchParams
+  const code = typeof resolvedSearchParams.code === 'string' ? resolvedSearchParams.code.trim() : ''
   let status: 'completed' | 'processing' | 'failed' | 'not_found' = 'not_found'
   let completedAt: string | null = null
 
@@ -42,11 +44,11 @@ export default async function FacebookDataDeletionPage({
     },
     failed: {
       title: 'Facebook data deletion needs attention',
-      description: 'We could not complete the request automatically. Contact toryxai@outlook.com and include the confirmation code below.',
+      description: `We could not complete the request automatically. Contact ${APP_BRAND.contactEmail} and include the confirmation code below.`,
     },
     not_found: {
       title: 'Facebook data deletion request not found',
-      description: 'Check that the complete confirmation link was opened, or contact toryxai@outlook.com for assistance.',
+      description: `Check that the complete confirmation link was opened, or contact ${APP_BRAND.contactEmail} for assistance.`,
     },
   }[status]
 

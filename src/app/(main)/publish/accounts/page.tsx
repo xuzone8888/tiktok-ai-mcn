@@ -86,6 +86,7 @@ interface TikTokAccount {
   comment_scopes: string[];
   comment_access_token_expires_at: string | null;
   comment_refresh_token_expires_at: string | null;
+  disconnect_status: "none" | "pending";
 }
 
 interface AccountGroup {
@@ -671,6 +672,7 @@ export default function TikTokAccountsPage() {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [commentConnectingId, setCommentConnectingId] = useState<string | null>(null);
   const [commentDisconnectingId, setCommentDisconnectingId] = useState<string | null>(null);
+  const [deletingTikTokData, setDeletingTikTokData] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("followers_desc");
   const [filterBy, setFilterBy] = useState<FilterOption>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("accounts");
@@ -1256,6 +1258,37 @@ export default function TikTokAccountsPage() {
     }
   };
 
+  const handleDeleteAllTikTokData = async () => {
+    const confirmed = window.confirm(
+      "这会永久删除 Star Gaze 保存的全部普通 TikTok 账号、分组、发布任务、评论缓存和操作日志。请先逐个断开评论授权与发布授权；TikTok 平台上的视频、评论和回复不会被删除。继续吗？"
+    );
+    if (!confirmed) return;
+
+    setDeletingTikTokData(true);
+    try {
+      const response = await fetch("/api/tiktok/data", { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(await readBindingApiError(response, "无法删除 TikTok 数据"));
+      }
+      toast({
+        title: "TikTok 本地数据已删除",
+        description: "普通账号、发布任务、评论缓存和相关日志已从 Star Gaze 删除。",
+      });
+      setSelectedGroupId(null);
+      setEditorOpen(false);
+      await refreshData({ silent: true });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "删除未完成",
+        description: error instanceof Error ? error.message : "请稍后重试",
+      });
+      await refreshData({ silent: true });
+    } finally {
+      setDeletingTikTokData(false);
+    }
+  };
+
   const handleRefresh = async (accountId: string) => {
     setRefreshingId(accountId);
 
@@ -1288,9 +1321,23 @@ export default function TikTokAccountsPage() {
 
   const handleDisconnect = async (accountId: string) => {
     try {
-      const response = await fetch(`/api/publish/accounts/${accountId}`, {
-        method: "DELETE",
-      });
+      const disconnect = (confirmUnknown = false) => fetch(
+        `/api/publish/accounts/${accountId}${confirmUnknown ? "?confirmUnknown=true" : ""}`,
+        { method: "DELETE" }
+      );
+      let response = await disconnect();
+      if (response.status === 409) {
+        const payload = await response.clone().json().catch(() => null);
+        if (payload?.code === "revocation_confirmation_required") {
+          const confirmed = window.confirm(
+            "TikTok 的远端撤销结果无法自动确认。请先在 TikTok 授权设置中确认 Star Gaze 已被撤销；确认后点击“确定”，仅完成本地解绑。"
+          );
+          if (!confirmed) {
+            throw new Error("账号保持停用，等待您确认 TikTok 端的撤销状态。");
+          }
+          response = await disconnect(true);
+        }
+      }
 
       if (!response.ok) {
         throw new Error(await readApiError(response, "无法解绑账号"));
@@ -1298,7 +1345,7 @@ export default function TikTokAccountsPage() {
 
       toast({
         title: "解绑成功",
-        description: "TikTok 账号已解绑",
+        description: "发布授权已撤销，既有发布记录保持不变。",
       });
 
       await refreshData({ silent: true });
@@ -1708,7 +1755,7 @@ export default function TikTokAccountsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
-          <TikTokLogo className="h-9 w-9 shrink-0 text-white" />
+          <TikTokLogo className="h-12 w-12 shrink-0 text-white" />
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-white">TikTok 账号管理</h1>
             <p className="mt-0.5 text-sm text-white/50">绑定和管理您的 TikTok 账号，用于发布视频内容</p>
@@ -1952,14 +1999,20 @@ export default function TikTokAccountsPage() {
                           className="flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.06] bg-black/20 text-white/40 transition-all hover:border-red-500/25 hover:bg-red-500/10 hover:text-red-300"
                           title="解绑"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          {account.disconnect_status === "pending" ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
                         </button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>确认解绑账号？</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            {account.disconnect_status === "pending" ? "继续处理解绑？" : "确认解绑账号？"}
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
-                            解绑后，将无法向该账号发布视频。若该账号是所在分组的最后一个账号，空分组会自动移除。
+                            解绑将撤销该账号的发布授权，但会保留既有发布任务和结果。如果已连接评论授权，请先单独断开评论授权。
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -2169,6 +2222,31 @@ export default function TikTokAccountsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {!IS_LOCAL_PREVIEW_MODE && (
+        <section className="rounded-xl border border-rose-400/20 bg-rose-400/[0.04] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-white">TikTok 数据控制</h2>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-white/50">
+                完成评论授权和发布授权撤销后，可事务化删除全部普通 TikTok 账号、分组、发布任务、评论缓存和操作日志。不会删除 TikTok 平台托管的视频、评论或回复，也不会删除独立的 TikTok Shop 数据。
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteAllTikTokData}
+              disabled={deletingTikTokData}
+              className="shrink-0"
+            >
+              {deletingTikTokData
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Trash2 className="h-4 w-4" />}
+              删除全部普通 TikTok 数据
+            </Button>
+          </div>
+        </section>
       )}
 
       <Dialog

@@ -316,15 +316,18 @@ export function Sidebar({
   // Render single nav item
   const renderNavItem = (item: NavItem, isActive: boolean) => {
     const Icon = item.icon;
+    const isTikTokBrandIcon = Icon === TikTokLogo;
     const isYouTubeBrandIcon = Icon === YouTubeBrandIcon;
     const isFacebookBrandIcon = Icon === FacebookBrandIcon;
-    const isPlatformBrandIcon = isYouTubeBrandIcon || isFacebookBrandIcon;
+    const isPlatformBrandIcon = isTikTokBrandIcon || isYouTubeBrandIcon || isFacebookBrandIcon;
     const isComingSoon = item.comingSoon;
     const isNavigating = pendingHref === item.href && !isActive;
     let renderedIcon = <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />;
 
     if (isNavigating) {
       renderedIcon = <Loader2 className="h-4 w-4 animate-spin text-mermaid-cyan" />;
+    } else if (isTikTokBrandIcon) {
+      renderedIcon = <TikTokLogo className="h-7 w-7 text-white" />;
     } else if (isYouTubeBrandIcon) {
       renderedIcon = <YouTubeBrandIcon compact className="h-[38px] w-11" />;
     } else if (isFacebookBrandIcon) {

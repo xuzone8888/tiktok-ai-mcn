@@ -87,7 +87,11 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     const mapped = mapSocialCommentError(error, 'Comment sync failed.')
-    console.error('Social comments sync API error:', error)
+    console.error('Social comments sync API error:', {
+      name: error instanceof Error ? error.name : 'Error',
+      code: mapped.code,
+      status: mapped.status,
+    })
     return NextResponse.json(
       { error: getApiMessage(mapped.code, mapped.message, lang), code: mapped.code },
       { status: mapped.status }
