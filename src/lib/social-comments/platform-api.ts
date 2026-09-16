@@ -788,6 +788,22 @@ export async function replyToInstagramComment(
   }
 }
 
+function facebookCommentAvatar(from: any): string | null {
+  const picture = from?.picture?.data
+  if (picture?.is_silhouette) return null
+  const value = textValue(picture?.url)
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    // Never persist credentials or token-bearing Graph URLs as browser images.
+    if (url.protocol !== 'https:' || url.username || url.password) return null
+    if ([...url.searchParams.keys()].some((key) => /token|secret|proof/i.test(key))) return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 function mapFacebookComment(
   comment: any,
   externalContentId: string,
@@ -808,7 +824,7 @@ function mapFacebookComment(
     thread_external_id: parentExternalCommentId || id,
     author_id: authorId,
     author_name: textValue(comment?.from?.name) || null,
-    author_avatar_url: null,
+    author_avatar_url: facebookCommentAvatar(comment?.from),
     message,
     like_count: numberValue(comment?.like_count),
     reply_count: numberValue(comment?.comment_count),
@@ -825,23 +841,45 @@ function mapFacebookComment(
   }
 }
 
+interface FacebookCommentReadContext {
+  includeProfile: boolean
+}
+
 async function fetchFacebookCommentPage(
   accessToken: string,
   objectId: string,
-  after: string | null
+  after: string | null,
+  context: FacebookCommentReadContext
 ) {
+  const baseFields = 'id,message,from,created_time,like_count,comment_count,can_comment,can_remove,can_hide,permalink_url'
   const params = new URLSearchParams({
-    fields: 'id,message,from,created_time,like_count,comment_count,can_comment,can_remove,can_hide,permalink_url',
+    fields: context.includeProfile
+      ? baseFields.replace(',from,', ',from{id,name,picture{url,is_silhouette}},')
+      : baseFields,
     limit: String(FACEBOOK_PAGE_SIZE),
     order: 'reverse_chronological',
     appsecret_proof: getFacebookAppSecretProof(accessToken),
   })
   if (after) params.set('after', after)
 
-  const response = await fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(objectId)}/comments?${params.toString()}`, {
+  const request = () => fetch(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(objectId)}/comments?${params.toString()}`, {
     cache: 'no-store',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
+  let response = await request()
+  if (!response.ok) {
+    const error = await readMetaError(response)
+    // Profile access may still be awaiting review. Retry the established fields
+    // once per sync, including reply pages. Never share this downgrade between
+    // accounts or syncs, or retry expired tokens/rate limits as profile failures.
+    if (context.includeProfile && ['10', '100', '200'].includes(String(error.code)) && !isRetryableStatus(response.status)) {
+      context.includeProfile = false
+      params.set('fields', baseFields)
+      response = await request()
+    } else {
+      throw new SocialCommentApiError('facebook', error.subcode || error.code, error.message, response.status, isRetryableStatus(response.status), error.retryAfter)
+    }
+  }
   if (!response.ok) {
     const error = await readMetaError(response)
     throw new SocialCommentApiError('facebook', error.subcode || error.code, error.message, response.status, isRetryableStatus(response.status), error.retryAfter)
@@ -852,14 +890,15 @@ async function fetchFacebookCommentPage(
 async function listFacebookCommentReplies(
   token: CommentTokenContext,
   externalContentId: string,
-  parentExternalCommentId: string
+  parentExternalCommentId: string,
+  context: FacebookCommentReadContext
 ): Promise<{ comments: ExternalSocialComment[]; truncated: boolean }> {
   const comments: ExternalSocialComment[] = []
   let after: string | null = null
   let truncated = false
 
   do {
-    const data = await fetchFacebookCommentPage(token.accessToken, parentExternalCommentId, after)
+    const data = await fetchFacebookCommentPage(token.accessToken, parentExternalCommentId, after, context)
     for (const reply of Array.isArray(data?.data) ? data.data : []) {
       if (comments.length >= FACEBOOK_MAX_REPLIES_PER_COMMENT) {
         truncated = true
@@ -898,9 +937,10 @@ export async function listFacebookComments(
   let after: string | null = null
   let topLevelTruncated = false
   let replyTruncated = false
+  const context: FacebookCommentReadContext = { includeProfile: true }
 
   do {
-    const data = await fetchFacebookCommentPage(token.accessToken, externalContentId, after)
+    const data = await fetchFacebookCommentPage(token.accessToken, externalContentId, after, context)
     for (const comment of Array.isArray(data?.data) ? data.data : []) {
       if (topLevelCount >= FACEBOOK_MAX_TOP_LEVEL_COMMENTS) {
         topLevelTruncated = true
@@ -912,7 +952,7 @@ export async function listFacebookComments(
       comments.push(mapped)
 
       if (mapped.reply_count > 0) {
-        const replies = await listFacebookCommentReplies(token, externalContentId, mapped.external_comment_id)
+        const replies = await listFacebookCommentReplies(token, externalContentId, mapped.external_comment_id, context)
         comments.push(...replies.comments)
         replyTruncated = replyTruncated || replies.truncated
       }
