@@ -35,6 +35,18 @@ export type VideoDuration = "5s" | "10s" | "15s" | "20s";
 export interface Database {
   public: {
     Tables: {
+      tiktok_task_previews: {
+        Row: { item_id: string; owner_id: string; upload_id: string; video_size: number; video_type: string; poster_size: number; ready: boolean; expires_at: string; created_at: string };
+        Insert: { item_id: string; owner_id: string; upload_id?: string; video_size: number; video_type: string; poster_size: number; ready?: boolean; expires_at?: string; created_at?: string };
+        Update: Partial<Database['public']['Tables']['tiktok_task_previews']['Insert']>;
+        Relationships: [{ foreignKeyName: 'tiktok_task_previews_item_id_fkey'; columns: ['item_id']; isOneToOne: true; referencedRelation: 'publish_task_items'; referencedColumns: ['id'] }];
+      };
+      tiktok_preview_cleanup: {
+        Row: { upload_id: string; owner_id: string; next_attempt_at: string; retain_until: string };
+        Insert: { upload_id: string; owner_id: string; next_attempt_at?: string; retain_until: string };
+        Update: Partial<Database['public']['Tables']['tiktok_preview_cleanup']['Insert']>;
+        Relationships: [];
+      };
       // -----------------------------------------------------------------------
       // Users 表
       // -----------------------------------------------------------------------
@@ -2018,6 +2030,10 @@ export interface Database {
     };
 
     Functions: {
+      reserve_tiktok_preview: {
+        Args: { p_user_id: string; p_item_id: string; p_poster_size: number };
+        Returns: Database['public']['Tables']['tiktok_task_previews']['Row'][];
+      };
       check_active_contract: {
         Args: {
           p_user_id: string;

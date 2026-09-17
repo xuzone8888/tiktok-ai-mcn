@@ -1,5 +1,9 @@
 'use client'
 
+import { useTikTokLanguage } from '@/hooks/use-tiktok-language'
+import { createPreviewPoster } from '@/lib/publish/preview-poster'
+import { saveTaskPreview } from '@/lib/publish/save-task-preview'
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -170,6 +174,7 @@ type CreateMode = 'single' | 'multiTask'
 type VideoSourceType = 'upload' | 'asset'  // Only support local upload and asset library
 
 export default function PublishPage() {
+    const { isEnglish } = useTikTokLanguage()
     console.log('[PublishPage] v2024.01.31-A - Component loaded')
     const router = useRouter()
     const { toast } = useToast()
@@ -685,42 +690,7 @@ export default function PublishPage() {
     }
 
     // Generate video thumbnail from first frame
-    const generateVideoThumbnail = (videoFile: File): Promise<string> => {
-        return new Promise((resolve) => {
-            const video = document.createElement('video')
-            video.preload = 'metadata'
-            video.muted = true
-            video.playsInline = true
-
-            video.onloadeddata = () => {
-                // Seek to 1 second or 0 if video is shorter
-                video.currentTime = Math.min(1, video.duration / 2)
-            }
-
-            video.onseeked = () => {
-                const canvas = document.createElement('canvas')
-                canvas.width = video.videoWidth
-                canvas.height = video.videoHeight
-                const ctx = canvas.getContext('2d')
-                if (ctx) {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-                    const thumbnail = canvas.toDataURL('image/jpeg', 0.7)
-                    URL.revokeObjectURL(video.src)
-                    resolve(thumbnail)
-                } else {
-                    URL.revokeObjectURL(video.src)
-                    resolve('')
-                }
-            }
-
-            video.onerror = () => {
-                URL.revokeObjectURL(video.src)
-                resolve('')
-            }
-
-            video.src = URL.createObjectURL(videoFile)
-        })
-    }
+    const generateVideoThumbnail = (videoFile: File): Promise<string> => createPreviewPoster(videoFile).catch(() => '')
 
     // Local files stay in the browser until the user confirms publishing. The
     // browser then uploads them directly to the provider-issued TikTok URL.
@@ -1175,6 +1145,12 @@ export default function PublishPage() {
         let taskCreated = false
 
         try {
+            if (directFileUpload) {
+                const readiness = await fetch('/api/publish/previews', { cache: 'no-store' })
+                if (!readiness.ok) {
+                    throw new Error(isEnglish ? 'Private preview storage is not ready. No task was created.' : '私有预览存储未就绪，尚未创建任务')
+                }
+            }
             const response = await fetch(
                 directFileUpload ? '/api/publish/file-tasks' : '/api/publish/tasks',
                 {
@@ -1270,6 +1246,8 @@ export default function PublishPage() {
                                 ? { ...file, status: 'uploading', progress: 0, error: undefined }
                                 : file
                         )))
+                        // Preview persistence must complete before any provider init.
+                        await saveTaskPreview(uploadItem.id, video.file, video.thumbnail, { isEnglish })
                         const initResponse = await fetch(
                             `/api/publish/tasks/${result.task.id}/items/${uploadItem.id}/file-upload/init`,
                             { method: 'POST' }

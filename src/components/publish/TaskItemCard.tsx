@@ -1,4 +1,6 @@
 'use client'
+import { useTikTokLanguage } from '@/hooks/use-tiktok-language'
+
 
 import { useState } from 'react'
 import Image from 'next/image'
@@ -6,6 +8,8 @@ import { Clock, CheckCircle, XCircle, AlertTriangle, Trash2, Loader2, Play, Hear
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { taskVideoTitle } from '@/lib/publish/task-presentation'
+import { TaskVideoPreview } from './TaskVideoPreview'
 
 export interface TaskItem {
     id: string
@@ -26,6 +30,7 @@ export interface TaskItem {
     plan_round?: number | null
     plan_account_position?: number | null
     source_video_name?: string | null
+    tiktok_transfer_method?: 'FILE_UPLOAD' | 'PULL_FROM_URL' | null
     // Video statistics from TikTok
     view_count?: number
     like_count?: number
@@ -40,6 +45,7 @@ export interface TaskItem {
 }
 
 interface TaskItemCardProps {
+    ownerId?: string
     item: TaskItem
     onDelete: (itemId: string, isPublished: boolean) => void
     onViewDetail?: (item: TaskItem) => void
@@ -60,7 +66,9 @@ const REVIEW_ERROR_CODES = new Set([
     'TIKTOK_INIT_OUTCOME_UNKNOWN',
 ])
 
-export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps) {
+export function TaskItemCard({ item, onDelete, onViewDetail, ownerId }: TaskItemCardProps) {
+  const { tr, isEnglish, locale } = useTikTokLanguage()
+
     const [deleting, setDeleting] = useState(false)
     const isReview = item.status === 'failed'
         && Boolean(item.error_code && REVIEW_ERROR_CODES.has(item.error_code))
@@ -68,12 +76,12 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
     const StatusIcon = config.icon
     const isProcessing = ['processing', 'uploading'].includes(item.status)
     const isPublished = item.status === 'published'
-    const displayTitle = item.title || '无标题'
+    const displayTitle = taskVideoTitle(item)
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-'
         const date = new Date(dateStr)
-        return date.toLocaleString('zh-CN', {
+        return date.toLocaleString(locale, {
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
@@ -82,15 +90,8 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
     }
 
     // 格式化数字: 12500 -> 12.5K
-    const formatNumber = (num: number): string => {
-        if (num >= 1000000) {
-            return (num / 1000000).toFixed(1) + 'M'
-        }
-        if (num >= 1000) {
-            return (num / 1000).toFixed(1) + 'K'
-        }
-        return num.toString()
-    }
+    const formatNumber = (num: number, numberLocale = locale): string =>
+        new Intl.NumberFormat(numberLocale, { notation: 'compact', maximumFractionDigits: 1 }).format(num)
 
     const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation()
@@ -103,13 +104,11 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
         }
     }
 
-    // 简单的策略：使用 Image 显示占位，或 Video 显示预览
-    const hasVideo = !!item.video_url
     const errorText = isReview
-        ? '系统无法确认 TikTok 是否已接收，请检查账号后处理'
+        ? tr('系统无法确认 TikTok 是否已接收，请检查账号后处理')
         : item.error_message
     const errorTitle = [
-        item.error_code ? `代码：${item.error_code}` : null,
+        item.error_code ? tr("代码：{0}", item.error_code) : null,
         errorText,
     ].filter(Boolean).join('\n')
     let statusNote: JSX.Element | null = null
@@ -161,24 +160,8 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
         >
             <div className="flex gap-3">
                 {/* 封面缩略图 */}
-                <div className="relative w-24 h-16 flex-shrink-0 rounded-md overflow-hidden bg-zinc-800 border border-white/5">
-                    {hasVideo ? (
-                        <video
-                            src={item.video_url}
-                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                            preload="metadata"
-                            muted
-                            playsInline
-                        />
-                    ) : (
-                        <Image
-                            src="/placeholder-video.png"
-                            alt="视频封面"
-                            fill
-                            className="object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                            unoptimized
-                        />
-                    )}
+                <div className="relative w-20 flex-shrink-0">
+                    <TaskVideoPreview ownerId={ownerId} refreshKey={item.status} taskItemId={item.id} videoUrl={item.video_url} title={displayTitle} localFile={item.tiktok_transfer_method === "FILE_UPLOAD" || item.video_url?.startsWith("file-upload://")} />
                     {/* 状态遮罩 */}
                     {isProcessing && (
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-[1px]">
@@ -198,7 +181,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                             >
                                 {displayTitle}
                             </h4>
-                            {item.source_video_name && (
+                            {item.source_video_name && item.source_video_name !== displayTitle && (
                                 <div className="mt-0.5 truncate text-[10px] text-zinc-600" title={item.source_video_name}>
                                     {item.source_video_name}
                                 </div>
@@ -217,12 +200,11 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                     />
                                 )}
                                 <span className="text-xs text-zinc-500 truncate">
-                                    {item.tiktok_accounts?.display_name || '未知账号'}
+                                    {item.tiktok_accounts?.display_name || tr('未知账号')}
                                 </span>
                                 {typeof item.plan_round === 'number' && (
                                     <span className="shrink-0 text-[10px] text-zinc-600">
-                                        第 {item.plan_round + 1} 轮
-                                    </span>
+                                        {tr("第")}{item.plan_round + 1} {tr("轮")}</span>
                                 )}
                             </div>
                         </div>
@@ -236,7 +218,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                 "w-2.5 h-2.5 mr-1",
                                 isProcessing && "animate-spin"
                             )} />
-                            {config.label}
+                            {tr(config.label)}
                         </Badge>
                     </div>
 
@@ -249,15 +231,15 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                     <div className="flex items-center gap-3 text-xs text-zinc-500">
                                         <span className="flex items-center gap-1 text-zinc-400 group-hover:text-zinc-300">
                                             <Play className="w-3 h-3" />
-                                            {formatNumber(item.view_count || 0)}
+                                            {item.stats_updated_at ? formatNumber(item.view_count || 0, locale) : '—'}
                                         </span>
                                         <span className="flex items-center gap-1 text-zinc-400 hover:text-rose-400">
                                             <Heart className="w-3 h-3" />
-                                            {formatNumber(item.like_count || 0)}
+                                            {item.stats_updated_at ? formatNumber(item.like_count || 0, locale) : '—'}
                                         </span>
                                         <span className="flex items-center gap-1 text-zinc-400 hover:text-blue-400">
                                             <MessageCircle className="w-3 h-3" />
-                                            {formatNumber(item.comment_count || 0)}
+                                            {item.stats_updated_at ? formatNumber(item.comment_count || 0, locale) : '—'}
                                         </span>
                                     </div>
                                     <span className="text-[10px] text-zinc-600">
@@ -266,7 +248,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                 </div>
                             ) : (
                                 <span className="text-xs text-zinc-600">
-                                    计划 {formatDate(item.scheduled_at)}
+                                    {tr("计划")}{formatDate(item.scheduled_at)}
                                 </span>
                             )}
                         </div>
@@ -283,7 +265,7 @@ export function TaskItemCard({ item, onDelete, onViewDetail }: TaskItemCardProps
                                         onClick={handleDelete}
                                         disabled={deleting}
                                         className="h-6 w-6 text-zinc-600 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all duration-200"
-                                        title="移除任务项"
+                                        title={tr("移除任务项")}
                                     >
                                         {deleting ? (
                                             <Loader2 className="w-3.5 h-3.5 animate-spin" />

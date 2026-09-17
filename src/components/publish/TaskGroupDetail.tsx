@@ -1,4 +1,6 @@
 'use client'
+import { useTikTokLanguage } from '@/hooks/use-tiktok-language'
+
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, Square, Trash2, RefreshCw, Play, Heart } from 'lucide-react'
@@ -45,6 +47,8 @@ export function TaskGroupDetail({
     onDeleteItem,
     onCancelPending
 }: TaskGroupDetailProps) {
+  const { tr, isEnglish, locale } = useTikTokLanguage()
+
     const [items, setItems] = useState<TaskItem[]>([])
     const [loading, setLoading] = useState(false)
     const [page, setPage] = useState(1)
@@ -91,18 +95,18 @@ export function TaskGroupDetail({
                 signal: controller.signal,
             })
             const data = await res.json()
-            if (!res.ok) throw new Error(data.error || '获取任务项失败')
+            if (!res.ok) throw new Error(data.error || tr('获取任务项失败'))
             if (itemsRequestRef.current !== requestId) return
             setItems(data.items || [])
             setTotalPages(data.pagination?.totalPages || 1)
         } catch (error) {
             if (itemsRequestRef.current !== requestId) return
             if (error instanceof DOMException && error.name === 'AbortError') return
-            setItemsError(error instanceof Error ? error.message : '获取任务项失败')
+            setItemsError(error instanceof Error ? error.message : tr('获取任务项失败'))
         } finally {
             if (itemsRequestRef.current === requestId) setLoading(false)
         }
-    }, [taskId, page, statusFilter])
+    }, [taskId, page, statusFilter, tr])
 
     useEffect(() => {
         if (open && taskId) {
@@ -190,7 +194,7 @@ export function TaskGroupDetail({
             })
             const data = await res.json()
             if (syncRequestRef.current !== requestId) return
-            if (!res.ok || !data.success) throw new Error(data.error || '视频数据同步失败')
+            if (!res.ok || !data.success) throw new Error(data.error || tr('视频数据同步失败'))
             setSyncResult({
                 views: data.total_views || 0,
                 likes: data.total_likes || 0
@@ -202,7 +206,7 @@ export function TaskGroupDetail({
         } catch (error) {
             if (syncRequestRef.current !== requestId) return
             if (error instanceof DOMException && error.name === 'AbortError') return
-            setSyncError(error instanceof Error ? error.message : '视频数据同步失败')
+            setSyncError(error instanceof Error ? error.message : tr('视频数据同步失败'))
         } finally {
             if (syncRequestRef.current === requestId) setSyncing(false)
         }
@@ -212,36 +216,36 @@ export function TaskGroupDetail({
     const isMultiTask = task.workflow === 'multi_task'
     const detailStats = isMultiTask
         ? [
-            { label: '总数', value: task.total_items, className: 'text-white' },
-            { label: '已发布', value: task.published_count, className: 'text-emerald-400' },
-            { label: '待发', value: task.pending_count, className: 'text-blue-400' },
-            { label: '执行中', value: task.active_count || 0, className: 'text-amber-300' },
-            { label: '结果确认中', value: task.confirming_count || 0, className: 'text-violet-300' },
-            { label: '失败', value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-400' : 'text-zinc-700' },
-            { label: '需确认', value: task.review_count || 0, className: (task.review_count || 0) > 0 ? 'text-orange-300' : 'text-zinc-700' },
+            { label: tr('总数'), value: task.total_items, className: 'text-white' },
+            { label: tr('已发布'), value: task.published_count, className: 'text-emerald-400' },
+            { label: tr('待发'), value: task.pending_count, className: 'text-blue-400' },
+            { label: tr('执行中'), value: task.active_count || 0, className: 'text-amber-300' },
+            { label: tr('结果确认中'), value: task.confirming_count || 0, className: 'text-violet-300' },
+            { label: tr('失败'), value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-400' : 'text-zinc-700' },
+            { label: tr('需确认'), value: task.review_count || 0, className: (task.review_count || 0) > 0 ? 'text-orange-300' : 'text-zinc-700' },
         ]
         : [
-            { label: '总数', value: task.total_items, className: 'text-white' },
-            { label: '成功', value: task.published_count, className: 'text-emerald-500' },
-            { label: '待发', value: task.pending_count, className: 'text-blue-500' },
-            { label: '失败', value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-500' : 'text-zinc-700' },
+            { label: tr('总数'), value: task.total_items, className: 'text-white' },
+            { label: tr('成功'), value: task.published_count, className: 'text-emerald-500' },
+            { label: tr('待发'), value: task.pending_count, className: 'text-blue-500' },
+            { label: tr('失败'), value: task.failed_count, className: task.failed_count > 0 ? 'text-rose-500' : 'text-zinc-700' },
         ]
     const statusOptions = isMultiTask
         ? [
-            { value: 'all', label: '全部状态' },
-            { value: 'pending', label: '待发' },
-            { value: 'processing', label: '执行中' },
-            { value: 'uploading', label: '结果确认中' },
-            { value: 'published', label: '已发布' },
-            { value: 'failed', label: '失败' },
-            { value: 'review', label: '需确认' },
-            { value: 'cancelled', label: '已停止' },
+            { value: 'all', label: tr('全部状态') },
+            { value: 'pending', label: tr('待发') },
+            { value: 'processing', label: tr('执行中') },
+            { value: 'uploading', label: tr('结果确认中') },
+            { value: 'published', label: tr('已发布') },
+            { value: 'failed', label: tr('失败') },
+            { value: 'review', label: tr('需确认') },
+            { value: 'cancelled', label: tr('已停止') },
         ]
         : [
-            { value: 'all', label: '全部状态' },
-            { value: 'pending', label: '待发布' },
-            { value: 'published', label: '已发布' },
-            { value: 'failed', label: '失败' },
+            { value: 'all', label: tr('全部状态') },
+            { value: 'pending', label: tr('待发布') },
+            { value: 'published', label: tr('已发布') },
+            { value: 'failed', label: tr('失败') },
         ]
 
     return (
@@ -252,7 +256,7 @@ export function TaskGroupDetail({
                         <div className="flex items-start justify-between">
                             <div>
                                 <SheetTitle className="text-xl font-bold text-zinc-100">
-                                    {task.name || '未命名任务组'}
+                                    {task.name || tr('未命名任务组')}
                                 </SheetTitle>
                                 <p className="text-sm text-zinc-500 mt-1 font-mono">
                                     ID: {task.id.slice(0, 8)}...{task.id.slice(-8)}
@@ -268,13 +272,13 @@ export function TaskGroupDetail({
                         )}>
                             {detailStats.map((stat, index) => (
                                 <div
-                                    key={stat.label}
+                                    key={tr(stat.label)}
                                     className={cn(
                                         'flex flex-col items-center justify-center',
                                         index < detailStats.length - 1 && 'sm:border-r sm:border-white/5 sm:pr-3'
                                     )}
                                 >
-                                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">{stat.label}</span>
+                                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">{tr(stat.label)}</span>
                                     <span className={cn('text-2xl font-bold mt-1', stat.className)}>{stat.value}</span>
                                 </div>
                             ))}
@@ -289,12 +293,12 @@ export function TaskGroupDetail({
                                 setPage(1)
                             }}>
                                 <SelectTrigger className="w-[120px] h-8 bg-zinc-900 border-white/10 text-zinc-300 text-xs focus:ring-zinc-700">
-                                    <SelectValue placeholder="全部状态" />
+                                    <SelectValue placeholder={tr("全部状态")} />
                                 </SelectTrigger>
                                 <SelectContent className="bg-zinc-900 border-white/10 text-zinc-300">
                                     {statusOptions.map(option => (
                                         <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
+                                            {tr(option.label)}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -309,7 +313,7 @@ export function TaskGroupDetail({
                                     className="h-8 bg-zinc-900 border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs"
                                 >
                                     <RefreshCw className={`w-3 h-3 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                                    {syncing ? '同步中' : '刷新数据'}
+                                    {syncing ? tr('同步中') : tr('刷新数据')}
                                 </Button>
                             )}
                         </div>
@@ -341,8 +345,7 @@ export function TaskGroupDetail({
                                     ) : (
                                         <Square className="w-3 h-3 mr-2" />
                                     )}
-                                    停止待发
-                                </Button>
+                                    {tr("停止待发")}</Button>
                             )}
                         </div>
                     </div>
@@ -368,7 +371,7 @@ export function TaskGroupDetail({
                         {!itemsError && loading && (
                             <div className="flex flex-col items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 animate-spin text-zinc-700 mb-4" />
-                                <p className="text-zinc-600 text-sm">加载任务数据...</p>
+                                <p className="text-zinc-600 text-sm">{tr("加载任务数据...")}</p>
                             </div>
                         )}
                         {!itemsError && !loading && items.length === 0 && (
@@ -376,13 +379,14 @@ export function TaskGroupDetail({
                                 <div className="p-4 bg-white/5 rounded-full mb-4">
                                     <Square className="w-8 h-8 text-zinc-700" />
                                 </div>
-                                <p className="text-zinc-500 font-medium text-sm">没有找到相关任务项</p>
+                                <p className="text-zinc-500 font-medium text-sm">{tr("没有找到相关任务项")}</p>
                             </div>
                         )}
                         {!itemsError && !loading && items.length > 0 && (
                             <div className="space-y-3">
                                 {items.map(item => (
                                     <TaskItemCard
+                                        ownerId={task.user_id}
                                         key={item.id}
                                         item={item}
                                         onDelete={() => handleDeleteClick(item.id, item.status === 'published')}
@@ -402,8 +406,7 @@ export function TaskGroupDetail({
                                     className="border-white/10 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 h-8 text-xs"
                                 >
                                     <ChevronLeft className="w-3 h-3 mr-1" />
-                                    上一页
-                                </Button>
+                                    {tr("上一页")}</Button>
                                 <span className="text-xs font-medium text-zinc-500">
                                     {page} / {totalPages}
                                 </span>
@@ -414,8 +417,7 @@ export function TaskGroupDetail({
                                     disabled={page === totalPages || loading}
                                     className="border-white/10 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 h-8 text-xs"
                                 >
-                                    下一页
-                                    <ChevronRight className="w-3 h-3 ml-1" />
+                                    {tr("下一页")}<ChevronRight className="w-3 h-3 ml-1" />
                                 </Button>
                             </div>
                         )}
@@ -427,14 +429,13 @@ export function TaskGroupDetail({
             <AlertDialog open={deleteConfirmOpen} onOpenChange={(open) => !isDeleting && setDeleteConfirmOpen(open)}>
                 <AlertDialogContent className="bg-zinc-950 border-white/10 text-zinc-100">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-zinc-100">确认删除任务项？</AlertDialogTitle>
+                        <AlertDialogTitle className="text-zinc-100">{tr("确认删除任务项？")}</AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
-                            此操作将从本地记录中删除该任务。
-                            {itemToDelete?.isPublished && '这只会删除本地任务记录，不会删除 TikTok 上的视频。如需删除线上视频，请先在 TikTok App 中手动操作。'}
+                            {tr("此操作将从本地记录中删除该任务。")}{itemToDelete?.isPublished && tr('这只会删除本地任务记录，不会删除 TikTok 上的视频。如需删除线上视频，请先在 TikTok App 中手动操作。')}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting} className="bg-transparent border-white/10 text-zinc-400 hover:bg-white/5 hover:text-white">取消</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isDeleting} className="bg-transparent border-white/10 text-zinc-400 hover:bg-white/5 hover:text-white">{tr("取消")}</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={(e) => {
                                 e.preventDefault()
@@ -446,13 +447,11 @@ export function TaskGroupDetail({
                             {isDeleting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    删除中...
-                                </>
+                                    {tr("删除中...")}</>
                             ) : (
                                 <>
                                     <Trash2 className="w-4 h-4 mr-2" />
-                                    确认删除本地记录
-                                </>
+                                    {tr("确认删除本地记录")}</>
                             )}
                         </AlertDialogAction>
                     </AlertDialogFooter>
@@ -463,16 +462,14 @@ export function TaskGroupDetail({
             <AlertDialog open={cancelAllConfirmOpen} onOpenChange={setCancelAllConfirmOpen}>
                 <AlertDialogContent className="bg-zinc-950 border-white/10 text-zinc-100">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-zinc-100">停止所有待发布任务？</AlertDialogTitle>
+                        <AlertDialogTitle className="text-zinc-100">{tr("停止所有待发布任务？")}</AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
-                            这将取消当前任务组中所有尚未执行的任务。已发布的视频不受影响。
-                        </AlertDialogDescription>
+                            {tr("这将取消当前任务组中所有尚未执行的任务。已发布的视频不受影响。")}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-transparent border-white/10 text-zinc-400 hover:bg-white/5 hover:text-white">取消</AlertDialogCancel>
+                        <AlertDialogCancel className="bg-transparent border-white/10 text-zinc-400 hover:bg-white/5 hover:text-white">{tr("取消")}</AlertDialogCancel>
                         <AlertDialogAction onClick={handleConfirmCancelAll} className="bg-red-600 hover:bg-red-700 text-white">
-                            确认停止
-                        </AlertDialogAction>
+                            {tr("确认停止")}</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

@@ -18,6 +18,7 @@ import {
 import { useLang } from "@/contexts/LangContext";
 import { type UserRole, isAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/client";
+import { clearLocalTaskPreviews } from '@/lib/publish/local-task-preview';
 import { cn } from "@/lib/utils";
 
 const isLocalPreviewMode =
@@ -188,6 +189,7 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_OUT") {
+          clearLocalTaskPreviews();
           setUser(null);
         } else if (event === "SIGNED_IN" && session?.user) {
           fetchUser();
@@ -243,6 +245,7 @@ export function Header({ initialUser = null }: { initialUser?: HeaderUser | null
     setLoggingOut(true);
     try {
       const supabase = createClient();
+      clearLocalTaskPreviews();
       await supabase.auth.signOut();
       setUser(null);
       router.push("/auth/login");

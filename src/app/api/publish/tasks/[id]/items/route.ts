@@ -69,6 +69,11 @@ export async function GET(
                 processing_started_at,
                 publish_init_started_at,
                 last_status_check_at,
+                view_count,
+                like_count,
+                comment_count,
+                share_count,
+                stats_updated_at,
                 tiktok_accounts!inner(id, display_name, avatar_url)
             `, { count: 'exact' })
             .eq('task_id', taskId)

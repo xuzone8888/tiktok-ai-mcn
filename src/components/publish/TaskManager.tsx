@@ -1,17 +1,11 @@
 'use client'
+import { useTikTokLanguage } from '@/hooks/use-tiktok-language'
 
+
+import { PublishTaskFilters } from "./PublishTaskFilters"
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, AlertTriangle, Trash2, ListTodo } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { AlertTriangle, Trash2, ListTodo } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,19 +17,17 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { TaskGroupCard, TaskGroup } from './TaskGroupCard'
+import { TaskOverview } from './TaskOverview'
 import { TaskGroupDetail } from './TaskGroupDetail'
 import { useToast } from '@/hooks/use-toast'
+import { useLatestPublishRequest } from '@/hooks/use-latest-publish-request'
+import { clearLocalTaskPreviews } from '@/lib/publish/local-task-preview'
 
 type DateRange = 'today' | 'yesterday' | '3days' | '7days'
 
-const dateRangeOptions: { value: DateRange; label: string }[] = [
-    { value: 'today', label: '今天' },
-    { value: 'yesterday', label: '昨天' },
-    { value: '3days', label: '近3天' },
-    { value: '7days', label: '近7天' },
-]
-
 export function TaskManager() {
+  const { tr, isEnglish, locale } = useTikTokLanguage()
+
     const { toast } = useToast()
     const [activeTab, setActiveTab] = useState('all')
     const [dateRange, setDateRange] = useState<DateRange>('today')
@@ -53,13 +45,16 @@ export function TaskManager() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [taskToDelete, setTaskToDelete] = useState<TaskGroup | null>(null)
     const [deleting, setDeleting] = useState(false)
+    const requestGate = useLatestPublishRequest()
 
-    const fetchTasks = useCallback(async (reset = false) => {
+    const fetchTasks = useCallback(async (reset = false, pageToLoad = 1, refreshLoaded = false) => {
+        const request = requestGate.begin()
         setLoading(true)
         try {
+            const requestedLimit = refreshLoaded ? pageToLoad * 20 : 20
             const params = new URLSearchParams({
-                limit: '20',
-                offset: reset ? '0' : ((page - 1) * 20).toString(),
+                limit: String(requestedLimit),
+                offset: reset ? '0' : ((pageToLoad - 1) * 20).toString(),
                 dateRange: dateRange
             })
 
@@ -67,8 +62,10 @@ export function TaskManager() {
                 params.append('status', activeTab)
             }
 
-            const res = await fetch(`/api/publish/tasks?${params}`)
+            const res = await fetch(`/api/publish/tasks?${params}`, { signal: request.signal })
             const data = await res.json()
+            if (!request.isCurrent()) return
+            if (!res.ok) throw new Error(tr('无法获取任务列表'))
 
             if (res.ok) {
                 const receivedTasks = data.tasks || []
@@ -80,27 +77,31 @@ export function TaskManager() {
                             : null
                     ))
                 } else {
-                    setTasks(prev => [...prev, ...receivedTasks])
+                    setTasks(prev => [...new Map([...prev, ...receivedTasks].map(task => [task.id, task])).values()])
                 }
-                setHasMore(receivedTasks.length === 20)
+                setPage(reset && !refreshLoaded ? 1 : pageToLoad)
+                setHasMore(receivedTasks.length === requestedLimit)
             }
         } catch (error) {
+            if (!request.isCurrent()) return
             console.error('Fetch tasks failed:', error)
             toast({
-                title: '加载失败',
-                description: '无法获取任务列表',
+                title: tr('加载失败'),
+                description: tr('无法获取任务列表'),
                 variant: 'destructive',
             })
         } finally {
-            setLoading(false)
+            if (request.isCurrent()) setLoading(false)
         }
-    }, [activeTab, dateRange, page, toast])
+    }, [activeTab, dateRange, requestGate, toast, tr])
 
     // Initial load & Tab/DateRange change
     useEffect(() => {
+        setTasks([])
         setPage(1)
         fetchTasks(true)
-    }, [activeTab, dateRange])
+        return () => requestGate.cancel()
+    }, [fetchTasks, requestGate])
 
     // 自动轮询：有进行中的任务时每 10 秒刷新
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -113,7 +114,7 @@ export function TaskManager() {
         if (hasActive) {
             if (!pollRef.current) {
                 pollRef.current = setInterval(() => {
-                    fetchTasks(true)
+                    if (!loading) void fetchTasks(true, page, true)
                 }, 10_000)
             }
         } else {
@@ -128,12 +129,8 @@ export function TaskManager() {
                 pollRef.current = null
             }
         }
-    }, [tasks, fetchTasks])
+    }, [tasks, fetchTasks, page, loading])
 
-    // W2 fix: 分页变化时加载更多
-    useEffect(() => {
-        if (page > 1) fetchTasks(false)
-    }, [page])
 
     const handleViewDetail = (taskId: string) => {
         const task = tasks.find(t => t.id === taskId)
@@ -159,26 +156,29 @@ export function TaskManager() {
 
             const data = await res.json()
 
-            if (!res.ok) throw new Error(data.error || '删除失败')
+            if (!res.ok) throw new Error(data.error || tr('删除失败'))
+            requestGate.cancel()
+            setLoading(false)
 
             // 如果有已发布视频，提示用户去TikTok手动删除
             if (taskToDelete.published_count > 0) {
                 toast({
-                    title: '任务组已删除',
-                    description: `请前往 TikTok App 手动删除 ${taskToDelete.published_count} 个已发布视频`,
+                    title: tr('任务组已删除'),
+                    description: tr("请前往 TikTok App 手动删除 {0} 个已发布视频", taskToDelete.published_count),
                 })
             } else {
-                toast({ title: '任务组已删除' })
+                toast({ title: tr('任务组已删除') })
             }
 
             // Remove from local state
+            clearLocalTaskPreviews('delete')
             setTasks(prev => prev.filter(t => t.id !== taskToDelete.id))
             setDeleteDialogOpen(false)
             setTaskToDelete(null)
 
         } catch (error: any) {
             toast({
-                title: '删除失败',
+                title: tr('删除失败'),
                 description: error.message,
                 variant: 'destructive',
             })
@@ -198,20 +198,22 @@ export function TaskManager() {
 
             const data = await res.json()
 
-            if (!res.ok) throw new Error(data.error || '删除失败')
+            if (!res.ok) throw new Error(data.error || tr('删除失败'))
+
+            clearLocalTaskPreviews('delete')
 
             toast({
-                title: '本地记录已删除',
+                title: tr('本地记录已删除'),
                 description: data.deletedItemStatus === 'published'
-                    ? 'TikTok 线上视频未被删除'
-                    : '任务统计已更新',
+                    ? tr('TikTok 线上视频未被删除')
+                    : tr('任务统计已更新'),
             })
             await fetchTasks(true)
             return true
 
         } catch (error: any) {
             toast({
-                title: '操作失败',
+                title: tr('操作失败'),
                 description: error.message,
                 variant: 'destructive',
             })
@@ -224,71 +226,28 @@ export function TaskManager() {
             const res = await fetch(`/api/publish/tasks/${taskId}/cancel-pending`, {
                 method: 'POST'
             })
-            if (!res.ok) throw new Error('取消失败')
+            if (!res.ok) throw new Error(tr('取消失败'))
 
-            toast({ title: '已取消所有待发布任务' })
+            toast({ title: tr('已取消所有待发布任务') })
             fetchTasks(true)
         } catch (error) {
             toast({
-                title: '取消失败',
+                title: tr('取消失败'),
                 variant: 'destructive',
             })
         }
     }
 
+    const filteredTasks = tasks.filter(task => !searchQuery.trim() || [task.name, ...(task.video_search_titles || (task.video_previews || []).map(video => video.title))].some(title => title?.toLowerCase().includes(searchQuery.trim().toLowerCase())))
+
     return (
         <div className="space-y-4">
-            {/* 筛选区域 */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-                        <TabsList>
-                            <TabsTrigger value="all">全部</TabsTrigger>
-                            <TabsTrigger value="in_progress">进行中</TabsTrigger>
-                            <TabsTrigger value="completed">已完成</TabsTrigger>
-                            <TabsTrigger value="failed">失败</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-
-                    {/* 时间筛选器 */}
-                    <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
-                        <SelectTrigger className="w-28 h-9 bg-white/5 border-white/10">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {dateRangeOptions.map(opt => (
-                                <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    {/* 7天清理提示 - 内联在筛选栏中，低调灰色 */}
-                    {tasks.length > 0 && (
-                        <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-600 pl-1">
-                            <AlertTriangle className="w-3 h-3 shrink-0" />
-                            <span>记录 <strong className="text-zinc-500">7 天</strong> 后自动清理</span>
-                        </span>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                        <Input
-                            placeholder="搜索任务..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 h-9 bg-white/5 border-white/10 focus:border-[#CCFF00]/30 focus:ring-1 focus:ring-[#CCFF00]/20 transition-all"
-                        />
-                    </div>
-                </div>
-            </div>
+            <TaskOverview tasks={filteredTasks} loading={loading} />
+            <PublishTaskFilters isEnglish={isEnglish} status={activeTab} onStatusChange={setActiveTab} dateRange={dateRange} onDateRangeChange={value => setDateRange(value as DateRange)} search={searchQuery} onSearchChange={setSearchQuery} loading={loading} onRefresh={() => { setPage(1); void fetchTasks(true) }} />
 
             {/* 任务列表 */}
-            {loading && page === 1 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {loading && page === 1 && tasks.length === 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start gap-3">
                     {[1, 2, 3].map(i => (
                         <div key={i} className="rounded-xl border border-white/5 bg-zinc-900/40 p-5 animate-pulse">
                             <div className="flex items-start justify-between mb-4">
@@ -304,18 +263,17 @@ export function TaskManager() {
                         </div>
                     ))}
                 </div>
-            ) : tasks.length === 0 ? (
+            ) : filteredTasks.length === 0 ? (
                 <div className="text-center py-16 bg-white/[0.02] border rounded-xl border-dashed border-white/10">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 mb-4">
                         <ListTodo className="w-7 h-7 text-zinc-600" />
                     </div>
-                    <p className="text-zinc-400 mb-1">暂无任务数据</p>
-                    <p className="text-xs text-zinc-600 mb-5">创建发布任务后，这里会展示任务状态和数据统计</p>
+                    <p className="text-zinc-400 mb-1">{searchQuery.trim() ? tr('没有匹配的任务或视频') : tr('暂无任务数据')}</p>
+                    <p className="text-xs text-zinc-600 mb-5">{tr("创建发布任务后，这里会展示任务状态和数据统计")}</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {tasks
-                        .filter(task => !searchQuery || task.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start gap-3">
+                    {filteredTasks
                         .map(task => (
                         <TaskGroupCard
                             key={task.id}
@@ -333,11 +291,10 @@ export function TaskManager() {
                     <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => setPage(p => p + 1)}
+                        onClick={() => void fetchTasks(false, page + 1)}
                         className="border-white/10 hover:border-white/20 text-zinc-400 hover:text-white transition-colors"
                     >
-                        加载更多任务
-                    </Button>
+                        {tr("加载更多任务")}</Button>
                 </div>
             )}
 
@@ -358,14 +315,11 @@ export function TaskManager() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-white flex items-center gap-2">
                             <Trash2 className="w-5 h-5 text-red-400" />
-                            删除任务组
-                        </AlertDialogTitle>
+                            {tr("删除任务组")}</AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-400">
-                            确定要删除任务组 &quot;{taskToDelete?.name || '未命名任务组'}&quot; 吗？
-                            {taskToDelete && taskToDelete.published_count > 0 && (
+                            {tr("确定要删除任务组 &quot;")}{taskToDelete?.name || tr('未命名任务组')}{tr("&quot; 吗？")}{taskToDelete && taskToDelete.published_count > 0 && (
                                 <span className="block mt-2 text-amber-400">
-                                    此任务组有 {taskToDelete.published_count} 个已发布视频
-                                </span>
+                                    {tr("此任务组有")}{taskToDelete.published_count} {tr("个已发布视频")}</span>
                             )}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -376,10 +330,9 @@ export function TaskManager() {
                             <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                                 <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
                                 <div>
-                                    <p className="text-amber-300 font-medium">已发布视频需手动删除</p>
+                                    <p className="text-amber-300 font-medium">{tr("已发布视频需手动删除")}</p>
                                     <p className="text-gray-400 text-sm mt-1">
-                                        TikTok不支持通过API删除视频。此任务组中的 {taskToDelete.published_count} 个已发布视频需要您前往 TikTok App 手动删除。
-                                    </p>
+                                        {tr("TikTok不支持通过API删除视频。此任务组中的")}{taskToDelete.published_count} {tr("个已发布视频需要您前往 TikTok App 手动删除。")}</p>
                                 </div>
                             </div>
                         </div>
@@ -387,14 +340,13 @@ export function TaskManager() {
 
                     <AlertDialogFooter>
                         <AlertDialogCancel className="bg-white/5 border-white/10 text-gray-300 hover:bg-white/10">
-                            取消
-                        </AlertDialogCancel>
+                            {tr("取消")}</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={confirmDeleteTask}
                             disabled={deleting}
                             className="bg-red-600 hover:bg-red-700 text-white"
                         >
-                            {deleting ? '删除中...' : '确认删除'}
+                            {deleting ? tr('删除中...') : tr('确认删除')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

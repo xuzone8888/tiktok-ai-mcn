@@ -28,6 +28,7 @@ function loadTsModule(relativePath, stubs = {}, globals = {}) {
     module: loadedModule,
     require(request) {
       if (Object.hasOwn(stubs, request)) return stubs[request]
+      if (request === '@/lib/publish/task-presentation') return loadTsModule('src/lib/publish/task-presentation.ts')
       return require(request)
     },
     AbortSignal,

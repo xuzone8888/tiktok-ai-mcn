@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { processPublishQueue } from '@/lib/publish-processor'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/types/database'
+import { playableTaskVideoUrl, taskVideoTitle } from '@/lib/publish/task-presentation'
 
 // TikTok Content Posting request types used by the task-creation boundary.
 type VideoPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY'
@@ -359,7 +360,14 @@ export async function GET(request: NextRequest) {
 
             return {
                 ...publicTask,
-                name: task.name || task.task_name || '未命名任务组',
+                name: task.name || (task.task_name !== '未命名任务组' ? task.task_name : null) || (totalItems === 1 ? taskVideoTitle(task.items[0]) : '未命名任务组'),
+                video_previews: (task.items || []).slice(0, 4).map((item: any) => ({
+                    id: item.id,
+                    title: taskVideoTitle(item),
+                    video_url: item.tiktok_transfer_method === 'FILE_UPLOAD' ? null : playableTaskVideoUrl(item.video_url),
+                    local_file: item.tiktok_transfer_method === 'FILE_UPLOAD',
+                })),
+                video_search_titles: (task.items || []).flatMap((item: { title?: string | null; source_video_name?: string | null }) => [item.title || '', item.source_video_name || '']),
                 display_status: summary.displayStatus,
                 account_group_name: summary.accountGroupName,
                 video_count: summary.videoCount,

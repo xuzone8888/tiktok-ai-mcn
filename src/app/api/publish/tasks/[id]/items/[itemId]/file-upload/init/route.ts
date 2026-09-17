@@ -17,8 +17,23 @@ export async function POST(
 
     const { id: taskId, itemId } = await params
     try {
+        const admin = createAdminClient()
+        // The browser cannot bypass persistent-preview preparation. Old clients
+        // fail before dispatch; this check never resets an existing attempt.
+        const { data: preview, error: previewError } = await admin
+            .from('tiktok_task_previews')
+            .select('item_id')
+            .eq('item_id', itemId)
+            .eq('owner_id', user.id)
+            .eq('ready', true)
+            .maybeSingle()
+        if (previewError || !preview) {
+            return NextResponse.json({ error: '请先保存视频预览，再开始 TikTok 上传' }, {
+                status: 409, headers: { 'Cache-Control': 'no-store' },
+            })
+        }
         const prepared = await prepareTikTokFileUpload(
-            createAdminClient(),
+            admin,
             user.id,
             taskId,
             itemId
