@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:demo": "NEXT_PUBLIC_TIKTOK_GROUPS_DEMO=true next dev",
+    "prebuild": "node scripts/check-duplicate-app-routes.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -21,6 +22,7 @@
     "canvas:prod-check": "node scripts/check-canvas-production-env.mjs",
     "canvas:resolve-unknown": "node scripts/resolve-canvas-unknown.mjs",
     "canvas:upload-sweep": "node scripts/sweep-canvas-upload-reservations.mjs",
+    "verify:app-routes": "node scripts/check-duplicate-app-routes.mjs",
     "verify:canvas-additive-production-operation": "node scripts/verify-canvas-additive-production-operation.mjs",
     "verify:canvas-blue-green": "node scripts/verify-canvas-blue-green.mjs",
     "verify:canvas-generation-backend": "node scripts/verify-canvas-generation-backend.mjs",
