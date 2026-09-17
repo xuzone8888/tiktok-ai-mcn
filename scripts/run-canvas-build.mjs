@@ -40,6 +40,29 @@ function parseArguments(argv) {
   };
 }
 
+async function runGuard(scriptPath, root) {
+  const guardEntry = lstatSync(scriptPath);
+  if (!guardEntry.isFile() || guardEntry.isSymbolicLink()) {
+    throw new Error("untrusted duplicate-route guard entrypoint");
+  }
+  const guard = spawn(process.execPath, [scriptPath], {
+    cwd: root,
+    shell: false,
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  const guardExit = await new Promise((resolveExit, rejectExit) => {
+    guard.once("error", rejectExit);
+    guard.once("exit", (code, signal) => {
+      if (signal) rejectExit(new Error("duplicate-route guard terminated by signal"));
+      else resolveExit(code ?? 1);
+    });
+  });
+  if (guardExit !== 0) {
+    throw new Error("duplicate App Router routes detected");
+  }
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const exactEnvironment = readExactReleaseEnvironment(
@@ -63,6 +86,15 @@ async function main() {
   if (!nextEntry.isFile() || nextEntry.isSymbolicLink()) {
     throw new Error("untrusted Next.js build entrypoint");
   }
+
+  // Guard: two page files normalizing to the same URL build "successfully" but
+  // leave one entry without a client-reference-manifest, which makes that route
+  // throw "Cannot read properties of undefined (reading 'clientModules')" at
+  // render time. Abort before the build so it never reaches a release directory.
+  await runGuard(
+    join(exactEnvironment.root, "scripts", "check-duplicate-app-routes.mjs"),
+    exactEnvironment.root
+  );
 
   // Only the release controller may opt in to a commit-bound BUILD_ID.
   const additions = { NODE_ENV: "production" };
