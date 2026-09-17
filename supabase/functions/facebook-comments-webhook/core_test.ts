@@ -1,13 +1,164 @@
 import {
   createFacebookWebhookHandler,
+  createFacebookWebhookCommentStore,
+  type FacebookWebhookReceipt,
   type FacebookWebhookCommentRow,
   type FacebookWebhookCommentStore,
   parseFacebookCommentEvents,
   processFacebookCommentWebhook,
+  resolveFacebookSupabaseConfiguration,
 } from './core.js'
 
 declare const Deno: {
   test(name: string, fn: () => void | Promise<void>): void
+}
+
+Deno.test('Facebook accepts absent or empty managed keys with a legacy key', () => {
+  for (const raw of [undefined, '{}', ' { } ']) {
+    const result = resolveFacebookSupabaseConfiguration((name) => ({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SECRET_KEYS: raw,
+      SUPABASE_SERVICE_ROLE_KEY: 'legacy-fixture',
+    })[name])
+    assertEquals(result.serviceRoleKey, 'legacy-fixture')
+  }
+})
+
+Deno.test('Facebook prefers default key and rejects malformed or incomplete nonempty maps', () => {
+  for (const raw of ['{', '[]', 'null', '"secret"', '', '{"default":""}', '{"named":"key"}']) {
+    let failed = false
+    try {
+      resolveFacebookSupabaseConfiguration((name) => ({
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SECRET_KEYS: raw,
+        SUPABASE_SERVICE_ROLE_KEY: 'legacy-fixture',
+      })[name])
+    } catch { failed = true }
+    assert(failed)
+  }
+  const result = resolveFacebookSupabaseConfiguration((name) => {
+    if (name === 'SUPABASE_URL') return 'https://example.supabase.co'
+    if (name === 'SUPABASE_SECRET_KEYS') return '{"default":"new-fixture"}'
+    throw new Error('must not read legacy key')
+  })
+  assertEquals(result.serviceRoleKey, 'new-fixture')
+  let failed = false
+  try {
+    resolveFacebookSupabaseConfiguration((name) => ({
+      SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SECRET_KEYS: '{}',
+    })[name])
+  } catch { failed = true }
+  assert(failed)
+})
+
+Deno.test('signed Facebook POST handles empty keys and safely classifies failures', async () => {
+  for (const mode of ['success', 'configuration', 'unexpected']) {
+    const logs: unknown[] = []
+    const receipts: unknown[] = []
+    let writes = 0
+    const secret = 'fixture-signing-secret'
+    const handler = createFacebookWebhookHandler({
+      getEnv: (name) => ({
+        FACEBOOK_CLIENT_SECRET: secret,
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SECRET_KEYS: mode === 'configuration' ? '{' : '{}',
+        SUPABASE_SERVICE_ROLE_KEY: 'private-fixture-key',
+      })[name],
+      createStore(config) {
+        assertEquals(config.serviceRoleKey, 'private-fixture-key')
+        if (mode === 'unexpected') throw new Error('private-fixture-key')
+        return {
+          async findActiveAccounts() {
+            return [{ id: FIXTURE.accountId, userId: FIXTURE.userId, externalId: FIXTURE.pageId }]
+          },
+          async findPublishedContent() { return { id: FIXTURE.taskItemId, externalId: FIXTURE.videoId } },
+          async upsertComment() { writes++; return 'saved' as const },
+        }
+      },
+      async recordReceipt(receipt) { receipts.push(receipt) },
+      logger: { info: (...args) => logs.push(args), error: (...args) => logs.push(args) },
+    })
+    const body = JSON.stringify(payload())
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key,
+      new TextEncoder().encode(body)))).map((b) => b.toString(16).padStart(2, '0')).join('')
+    const response = await handler(new Request('https://example.test/facebook-comments-webhook', {
+      method: 'POST', body, headers: { 'x-hub-signature-256': `sha256=${signature}` },
+    }))
+    assertEquals(response.status, mode === 'success' ? 200 : 500)
+    assertEquals(writes, mode === 'success' ? 1 : 0)
+    const output = JSON.stringify({ logs, receipts, response: await response.json() })
+    assert(!output.includes(secret) && !output.includes('private-fixture-key'))
+    if (mode !== 'success') {
+      assert(output.includes(mode === 'configuration'
+        ? 'invalid_supabase_secret_keys' : 'unclassified_processing_error'))
+    }
+  }
+})
+
+for (const reason of ['task_lookup_failed', 'task_lookup_invalid_result']) {
+  Deno.test(`signed Facebook POST safely reports ${reason}`, async () => {
+    const logs: unknown[] = []
+    const receipts: FacebookWebhookReceipt[] = []
+    let writes = 0
+    let lookups = 0
+    const secret = 'task-test-signing-secret'
+    const privateError = 'private-database-details-fixture'
+    const handler = createFacebookWebhookHandler({
+      getEnv: (name) => ({
+        FACEBOOK_CLIENT_SECRET: secret,
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SECRET_KEYS: '{}',
+        SUPABASE_SERVICE_ROLE_KEY: 'task-test-service-secret',
+      })[name],
+      createStore: () => createFacebookWebhookCommentStore({
+        async findActiveAccounts() {
+          return { data: [{ id: FIXTURE.accountId, user_id: FIXTURE.userId,
+            channel_id: FIXTURE.pageId }], error: null }
+        },
+        async findPublishedContent() {
+          return { data: [{ id: FIXTURE.taskItemId, task_id: 'task-fixture',
+            facebook_video_id: FIXTURE.videoId, facebook_post_id: FIXTURE.postId }], error: null }
+        },
+        async findOwnedTasks(taskId, userId) {
+          lookups++
+          assertEquals(taskId, 'task-fixture')
+          assertEquals(userId, FIXTURE.userId)
+          return { data: null,
+            error: reason === 'task_lookup_failed' ? new Error(privateError) : null }
+        },
+        async upsertSocialComment() { writes++; return { data: [], error: null } },
+      }),
+      async recordReceipt(receipt) { receipts.push(receipt) },
+      logger: { info: (...args) => logs.push(args), error: (...args) => logs.push(args) },
+    })
+    const body = JSON.stringify(payload({ message: 'private-comment-fixture' }))
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key,
+      new TextEncoder().encode(body)))).map((b) => b.toString(16).padStart(2, '0')).join('')
+    const response = await handler(new Request('https://example.test/facebook-comments-webhook', {
+      method: 'POST', body, headers: { 'x-hub-signature-256': `sha256=${signature}` },
+    }))
+    assertEquals(response.status, 500)
+    assertEquals(lookups, 1)
+    assertEquals(writes, 0)
+    assertEquals(receipts.length, 1)
+    assertEquals(receipts[0].status, 'failed')
+    assertEquals(receipts[0].signatureValid, true)
+    assertEquals(receipts[0].step, 'processing')
+    assertEquals(receipts[0].errorCode, 'webhook_persistence_failed')
+    assertEquals(receipts[0].metadata, { reason })
+    assertEquals(logs, [['Facebook webhook processing failed', {
+      code: 'webhook_persistence_failed', reason, error_count: 1,
+    }]])
+    const responseBody = await response.json()
+    assertEquals(responseBody, { error: 'Webhook processing failed', code: 'webhook_persistence_failed' })
+    const output = JSON.stringify({ logs, receipts, responseBody })
+    for (const sensitive of [secret, signature, privateError, 'task-test-service-secret',
+      'private-comment-fixture']) assert(!output.includes(sensitive))
+  })
 }
 
 function assert(condition: unknown, message = 'Assertion failed'): asserts condition {
