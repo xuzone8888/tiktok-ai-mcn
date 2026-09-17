@@ -1,5 +1,7 @@
 "use client"
 
+import { scheduleFacebookPostIdentityRecovery } from '@/lib/facebook/post-identity-client'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
@@ -1037,6 +1039,7 @@ export default function SocialCommentsClient({
         })
       }
       await loadComments({ silent: isBackground, target: syncTarget, visibleToken: workspaceToken })
+      scheduleFacebookPostIdentityRecovery(syncPlatform, data, requestHeaders)
       return { status: "completed" as const, data }
     } catch (error) {
       const apiError = error as SocialCommentsApiError

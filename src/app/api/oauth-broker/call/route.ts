@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import * as facebookOAuth from '@/lib/facebook/oauth'
+import { resolveFacebookVideoPostIdentity } from '@/lib/facebook/post-identity'
 import * as instagramOAuth from '@/lib/instagram/oauth'
 import * as socialComments from '@/lib/social-comments/platform-api'
 import * as youtubeOAuth from '@/lib/youtube/oauth'
@@ -24,6 +25,7 @@ type BrokerFn = (...args: unknown[]) => Promise<unknown>
 //（只会用 oauth.ts 里写死的 5 个 Meta/Google 主机）。params 决定从 args 里按名取值并按位传参。
 const OPS: Record<BrokerPlatform, Record<string, { fn: BrokerFn; params: string[] }>> = {
   facebook: {
+    resolveFacebookVideoPostIdentity: { fn: resolveFacebookVideoPostIdentity as BrokerFn, params: ['accessToken', 'pageId', 'videoId', 'scanPosts'] },
     exchangeFacebookCodeForToken: { fn: facebookOAuth.exchangeFacebookCodeForToken as BrokerFn, params: ['code', 'codeVerifier'] },
     exchangeForLongLivedUserToken: { fn: facebookOAuth.exchangeForLongLivedUserToken as BrokerFn, params: ['accessToken'] },
     discoverMyFacebookPages: { fn: facebookOAuth.discoverMyFacebookPages as BrokerFn, params: ['userAccessToken'] },

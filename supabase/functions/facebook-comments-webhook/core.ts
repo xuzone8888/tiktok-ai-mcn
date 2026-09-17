@@ -174,6 +174,10 @@ function contentCandidates(pageId: string, postId: string): string[] {
   const prefix = `${pageId}_`
   if (postId.startsWith(prefix) && postId.length > prefix.length) {
     candidates.add(postId.slice(prefix.length))
+  } else if (/^\d+$/.test(pageId) && /^\d+$/.test(postId)) {
+    // Video lookup may store Page_Post while a feed event supplies the bare Post ID.
+    // The store still requires the same active account, unique content and task owner.
+    candidates.add(`${pageId}_${postId}`)
   }
   return [...candidates]
 }
