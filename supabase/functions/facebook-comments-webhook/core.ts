@@ -1,5 +1,6 @@
 import {
   type DatabaseResult,
+  InstagramWebhookConfigurationError,
   readRawBodyWithinLimit,
   resolveSupabaseAdminConfiguration,
   type SafeLogger,
@@ -8,6 +9,27 @@ import {
 } from '../instagram-comments-webhook/core.js'
 
 export const FACEBOOK_WEBHOOK_PATHNAME = '/facebook-comments-webhook'
+
+// Facebook-only compatibility: an empty managed key map means no new keys
+// have been provisioned. Malformed/nonempty maps still fail closed.
+export function resolveFacebookSupabaseConfiguration(
+  getEnv: (name: string) => string | undefined,
+): SupabaseAdminConfiguration {
+  const raw = getEnv('SUPABASE_SECRET_KEYS')
+  let emptyMap = false
+  if (raw !== undefined) {
+    try {
+      const value = JSON.parse(raw)
+      emptyMap = value !== null && typeof value === 'object' &&
+        !Array.isArray(value) && Object.keys(value).length === 0
+    } catch {
+      // Let the shared strict validator classify malformed configuration.
+    }
+  }
+  return resolveSupabaseAdminConfiguration((name) =>
+    name === 'SUPABASE_SECRET_KEYS' ? (emptyMap ? undefined : raw) : getEnv(name)
+  )
+}
 
 export interface FacebookWebhookCommentEvent {
   accountExternalId: string
@@ -105,7 +127,7 @@ export interface FacebookWebhookReceipt {
   bodyLength: number | null
   httpStatus: number
   errorCode: string | null
-  metadata?: Record<string, number>
+  metadata?: Record<string, number | string>
 }
 
 export interface FacebookWebhookHandlerDependencies {
@@ -507,7 +529,7 @@ export function createFacebookWebhookHandler(
     }
 
     try {
-      const config = resolveSupabaseAdminConfiguration(dependencies.getEnv)
+      const config = resolveFacebookSupabaseConfiguration(dependencies.getEnv)
       const result = await processFacebookCommentWebhook(body, dependencies.createStore(config))
       logger.info('Facebook webhook processed', { ...result })
       await recordReceipt({
@@ -542,16 +564,28 @@ export function createFacebookWebhookHandler(
         return jsonResponse(400, error.code, 'Invalid webhook payload')
       }
       const isDatabaseError = error instanceof FacebookWebhookDatabaseError
+      const isConfigurationError = error instanceof InstagramWebhookConfigurationError
       const code = isDatabaseError ? 'webhook_persistence_failed' : 'webhook_processing_failed'
-      logger.error('Facebook webhook processing failed', { code, error_count: 1 })
+      const allowedReasons = new Set([
+        'missing_supabase_url', 'invalid_supabase_url',
+        'invalid_supabase_secret_keys', 'missing_supabase_service_role_key',
+        'account_lookup_failed', 'account_lookup_invalid_result',
+        'content_lookup_failed', 'content_lookup_invalid_result',
+        'task_lookup_failed', 'task_lookup_invalid_result',
+        'comment_upsert_failed', 'comment_upsert_invalid_result',
+      ])
+      const reason = (isConfigurationError || isDatabaseError) && allowedReasons.has(error.code)
+        ? error.code : 'unclassified_processing_error'
+      logger.error('Facebook webhook processing failed', { code, reason, error_count: 1 })
       await recordReceipt({
         provider: 'facebook',
         status: 'failed',
-        step: isDatabaseError ? 'processing' : 'configuration',
+        step: isConfigurationError ? 'configuration' : 'processing',
         signatureValid: true,
         bodyLength: rawBody.byteLength,
         httpStatus: 500,
         errorCode: code,
+        metadata: { reason },
       })
       return jsonResponse(500, code, 'Webhook processing failed')
     }
