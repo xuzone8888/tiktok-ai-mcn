@@ -1,5 +1,6 @@
 import { getFacebookAppSecretProof } from '@/lib/facebook/oauth'
 import { isPrivateOrLoopbackHostname } from '@/lib/publish/url-safety'
+import { resolveFacebookVideoPostIdentity } from '@/lib/facebook/post-identity'
 
 export interface UploadFacebookVideoOptions {
   pageId: string
@@ -17,7 +18,6 @@ export interface FacebookVideoUploadResult {
 }
 
 const FACEBOOK_API_VERSION = process.env.FACEBOOK_API_VERSION || 'v25.0'
-const FACEBOOK_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_VIDEO_GRAPH_URL = `https://graph-video.facebook.com/${FACEBOOK_API_VERSION}`
 const FACEBOOK_SINGLE_VIDEO_TEST_LIMIT_BYTES = 500 * 1024 * 1024
 const FACEBOOK_POST_ID_RESOLUTION_DELAYS_MS = [0, 750, 1_500, 3_000] as const
@@ -130,26 +130,7 @@ async function fetchVideoBlob(videoUrl: string): Promise<Blob> {
   return new Blob([bytes], { type: contentType })
 }
 
-async function resolvePublishedVideoIdentity(accessToken: string, videoId: string) {
-  const url = new URL(`${FACEBOOK_GRAPH_URL}/${encodeURIComponent(videoId)}`)
-  url.searchParams.set('fields', 'id,post_id,permalink_url')
-  url.searchParams.set('appsecret_proof', getFacebookAppSecretProof(accessToken))
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!response.ok) return null
-
-  const data = await response.json().catch(() => null) as any
-  return {
-    postId: typeof data?.post_id === 'string' && data.post_id ? data.post_id : null,
-    permalinkUrl: typeof data?.permalink_url === 'string' && data.permalink_url
-      ? data.permalink_url
-      : null,
-  }
-}
-
-async function resolvePublishedVideoIdentityWithRetry(accessToken: string, videoId: string) {
+async function resolvePublishedVideoIdentityWithRetry(accessToken: string, pageId: string, videoId: string) {
   let bestPostId: string | null = null
   let bestPermalinkUrl: string | null = null
 
@@ -158,7 +139,9 @@ async function resolvePublishedVideoIdentityWithRetry(accessToken: string, video
       await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
 
-    const identity = await resolvePublishedVideoIdentity(accessToken, videoId).catch(() => null)
+    const identity = await resolveFacebookVideoPostIdentity(
+      accessToken, pageId, videoId, delayMs === 3_000,
+    ).catch(() => null)
     bestPostId = identity?.postId || bestPostId
     bestPermalinkUrl = identity?.permalinkUrl || bestPermalinkUrl
     if (bestPostId) return { postId: bestPostId, permalinkUrl: bestPermalinkUrl }
@@ -213,7 +196,7 @@ export async function uploadFacebookVideoFromUrl(
 
   // Facebook may return the video before its backing Page post is queryable. Retry only
   // this read-only identity lookup, with a fixed bound, and never repeat the upload.
-  const identity = await resolvePublishedVideoIdentityWithRetry(accessToken, data.id)
+  const identity = await resolvePublishedVideoIdentityWithRetry(accessToken, options.pageId, data.id)
 
   return {
     videoId: data.id,

@@ -101,6 +101,7 @@ interface RecentSyncTargetResult {
   externalContentId: string
   status: 'completed' | 'failed' | 'throttled' | 'unsupported'
   syncedCount: number
+  facebookIdentityRecoveryLogId?: string
   code?: string
   error?: string
   retryable?: boolean
@@ -1228,9 +1229,24 @@ async function startSyncActionLog(
   }
 }
 
+export async function recoverFacebookIdentityAfterSync(userId: string, logId: string) {
+  const admin = createAdminClient() as any
+  const { recoverFacebookIdentityForSync, recoverFacebookPostIdentity } = await import('@/lib/facebook/post-identity-recovery')
+  return recoverFacebookIdentityForSync(admin, userId, logId, async (accountId, videoId) => {
+    const content = await findOwnedPublishedContent(admin, userId, 'facebook', accountId, videoId)
+    const token = await getFacebookToken(admin, userId, accountId)
+    assertScopes('facebook', 'read', token.scopes)
+    return recoverFacebookPostIdentity(admin, {
+      userId, accountId, pageId: token.accountExternalId, taskItemId: content.id,
+      videoId: content.external_content_id, accessToken: token.accessToken,
+    })
+  })
+}
+
 export async function syncSocialComments(userId: string, target: CommentSyncTarget, options: SyncOptions = {}): Promise<{
   comments: SavedSocialComment[]
   syncedCount: number
+  facebookIdentityRecoveryLogId?: string
 } & SocialCommentSyncCompleteness> {
   const admin = createAdminClient() as any
   const syncSource = options.source || 'manual'
@@ -1324,6 +1340,7 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
         pagination_complete: !truncated,
         replies_fetched: true,
         provider_raw_count: providerComments.length,
+        facebook_post_identity_status: 'pending',
         mapped_count: comments.length,
         truncated,
       }
@@ -1366,6 +1383,7 @@ export async function syncSocialComments(userId: string, target: CommentSyncTarg
     return {
       comments: saved,
       syncedCount: saved.length,
+      ...(target.platform === 'facebook' ? { facebookIdentityRecoveryLogId: actionLogId } : {}),
       thread_completeness: threadCompleteness,
       replies_fetched: repliesFetched,
       truncated,
@@ -1765,6 +1783,7 @@ export async function syncRecentSocialComments(
           externalContentId: content.external_content_id,
           status: 'completed',
           syncedCount: result.syncedCount,
+          ...(platform === 'facebook' ? { facebookIdentityRecoveryLogId: result.facebookIdentityRecoveryLogId } : {}),
         })
       } catch (error) {
         const mapped = mapApiError(error, 'Comment sync failed.')

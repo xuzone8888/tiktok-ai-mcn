@@ -226,6 +226,43 @@ Deno.test('ignores non-add and non-comment feed changes', () => {
   assertEquals(edited.events.length + post.events.length, 0)
 })
 
+Deno.test('recovered post mapping saves to only the owned binding for bare and compound IDs', async () => {
+  for (const postId of ['9999999999', FIXTURE.postId]) {
+    for (const mode of ['missing', 'recovered', 'foreign-task', 'ambiguous']) {
+      let saved = 0
+      const store = createFacebookWebhookCommentStore({
+        async findActiveAccounts() {
+          return { data: ['old-a', 'old-b', FIXTURE.accountId].map(id => ({
+            id, user_id: FIXTURE.userId, channel_id: FIXTURE.pageId,
+          })), error: null }
+        },
+        async findPublishedContent(accountId, candidates) {
+          const found = accountId === FIXTURE.accountId && mode !== 'missing'
+            && candidates.includes(FIXTURE.postId)
+          const row = { id: FIXTURE.taskItemId, task_id: 'owned-task',
+            facebook_video_id: FIXTURE.videoId, facebook_post_id: FIXTURE.postId }
+          return { data: found ? (mode === 'ambiguous' ? [row, row] : [row]) : [], error: null }
+        },
+        async findOwnedTasks(_taskId, userId) {
+          assertEquals(userId, FIXTURE.userId)
+          return { data: mode === 'foreign-task' ? [] : [{ id: 'owned-task' }], error: null }
+        },
+        async upsertSocialComment(row) {
+          saved++
+          assertEquals(row.external_content_id, FIXTURE.videoId)
+          assertEquals(row.account_id, FIXTURE.accountId)
+          assertEquals(row.metadata, { source: 'webhook', event_type: 'feed.comment.add' })
+          return { data: [{ id: 'saved-comment' }], error: null }
+        },
+      })
+      const result = await processFacebookCommentWebhook(payload({ post_id: postId, parent_id: postId }), store)
+      assertEquals(saved, mode === 'recovered' ? 1 : 0)
+      assertEquals(result.saved_count, saved)
+      assertEquals(result.ignored_count, 3 - saved)
+    }
+  }
+})
+
 Deno.test('maps an owned published Facebook comment into shared cache shape', async () => {
   let saved: FacebookWebhookCommentRow | null = null
   const store: FacebookWebhookCommentStore = {
