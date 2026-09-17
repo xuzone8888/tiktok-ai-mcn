@@ -168,6 +168,9 @@ Complete these in order after the branch is deployed:
 - The final Meta callback values must be:
   - deauthorization: `https://www.toryxai.com/api/facebook/deauthorize`
   - data deletion: `https://www.toryxai.com/api/facebook/data-deletion`
+- 2026-09-17: `FACEBOOK_PAGE_WEBHOOK_ENABLED` was absent from the production release environment (not `false` — the key did not exist), so the Page subscription call had never executed. It was added as `=true` to release `31d4356` and loaded by restarting the `stargaze-canvas-31d4356` process on port 3020. Verified in the same pass: the built server bundle keeps this key as a runtime read (so no rebuild is required), `NEXT_PUBLIC_FACEBOOK_COMMENTS_ENABLED=true`, `SOCIAL_COMMENTS_API_ENABLED=true`, and `SOCIAL_COMMENTS_ENABLED_PLATFORMS=youtube,instagram,facebook`.
+- 2026-09-17: the broker leg that the flag activates was probed with no credentials. `subscribeFacebookPageToWebhooks` returns HTTP `200` carrying Meta’s own `Invalid OAuth access token`, proving the operation is registered and reaches Meta; a deliberately nonexistent operation returns HTTP `400 unknown_platform_or_op` as the control. Enabling the flag therefore does not break Page binding.
+- Still open: the flag is a write-time gate read only by the bind and refresh routes, so it does not retroactively subscribe Pages that were bound while it was absent. Each existing Page must be refreshed or reconnected once before `/{page-id}/subscribed_apps` will list the app with `feed`.
 - The remaining production uncertainty is configuration, not route availability: confirm the deployed runtime has `FACEBOOK_PAGE_WEBHOOK_ENABLED=true` and that a newly connected reviewer Page is subscribed through `/{page-id}/subscribed_apps`.
 - Meta Basic Settings now uses **Data Deletion Callback URL** with `https://www.toryxai.com/api/facebook/data-deletion`; the value was saved and persisted after reload on 2026-08-08.
 - Meta's current [Data Deletion Callback documentation](https://developers.facebook.com/documentation/development/create-an-app/app-dashboard/data-deletion-callback) confirms that the callback receives a POST `signed_request` and must return JSON containing a status URL and confirmation code. The production route implements that contract; its deployed behavior must still be rechecked after the v25 branch is released.
@@ -182,8 +185,8 @@ Complete these in order after the branch is deployed:
 
 - [x] Migration tables/fields present in production
 - [x] Webhook endpoint deployed, Page object selected, callback verified, and app-level `feed` subscribed
-- [ ] Confirm production `FACEBOOK_PAGE_WEBHOOK_ENABLED=true`
-- [ ] Confirm `NEXT_PUBLIC_FACEBOOK_COMMENTS_ENABLED=true`, `SOCIAL_COMMENTS_API_ENABLED=true`, and `SOCIAL_COMMENTS_ENABLED_PLATFORMS` contains `facebook`
+- [x] Confirm production `FACEBOOK_PAGE_WEBHOOK_ENABLED=true`
+- [x] Confirm `NEXT_PUBLIC_FACEBOOK_COMMENTS_ENABLED=true`, `SOCIAL_COMMENTS_API_ENABLED=true`, and `SOCIAL_COMMENTS_ENABLED_PLATFORMS` contains `facebook`
 - [ ] If `OAUTH_BROKER_URL` is enabled, rebuild the United States broker from the same release commit before deploying the Alibaba Cloud application, then verify a two-Page connection through the broker path
 - [x] Confirm the deauthorization URL in Meta matches the production callback above
 - [x] User Data Deletion uses callback mode with `https://www.toryxai.com/api/facebook/data-deletion`
